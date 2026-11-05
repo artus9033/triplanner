@@ -277,6 +277,9 @@ body {
 }
 
 /* Steps timeline */
+.steps .eyebrow {
+  display: block;
+}
 .step-button {
   all: unset;
   cursor: pointer;
@@ -362,10 +365,6 @@ body {
   min-height: 320px;
   background: #eeeeef;
   font: inherit;
-}
-/* Grey tiles keep the purple pins as the only color on the map. */
-.map-frame .leaflet-tile-pane {
-  filter: grayscale(1);
 }
 .map-frame .leaflet-control-attribution {
   font-size: 0.65rem;
