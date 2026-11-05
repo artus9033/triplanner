@@ -7,4 +7,6 @@ If they lack some information, the state machine will ask them for it. Do not ov
 
 Integrate a small whisper OSS model for speech to text + a small model text to speech with a nice voice for user to be able to type with voice + read aloud the messages from AI.
 
-1. First step after completion - refinement
+1. First step after completion - refinement of the trip plan with the user based on the chat history and the state machine. If the user was not specific about the place, a spacexai grok LLM over the API with web search tool (NO OTHER TOOLS ALLOWED) should search and propose the places, then the user should be shown a multiselect component with places + 1 link per place to google maps / website if not on google maps. The user should be able to select the places and the state machine should update the trip plan with the selected places.
+
+If the user was specific about the places and there is no need for search, this step should skip.
