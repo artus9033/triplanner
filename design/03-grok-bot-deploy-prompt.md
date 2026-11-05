@@ -44,7 +44,7 @@ fi
 
 **Stop here and tell me if** the clone fails, or if the repo has no `package.json`. That means the app has not been pushed yet. Do not build the app yourself.
 
-**Step 4: read the docs.** Read `README.md` and `design/01-plan.md`. If the README's commands differ from this brief, follow the README and tell me about the difference.
+**Step 4: read the docs.** Read `README.md` and `design/04-plan-refined-v2.md`. If the README's commands differ from this brief, follow the README and tell me about the difference.
 
 **Step 5: install.** Install the Node version from `.nvmrc` and the pnpm version from `package.json` under `$BASE/.tools`, if they are not already available. Then run:
 
@@ -54,7 +54,7 @@ cd "$BASE/triplanner" && pnpm run bootstrap
 
 **Step 6: secrets for the app.** Using the same method as step 2, get these values into `.env` without displaying them, and make sure the file has mode 600 and is git-ignored:
 
-- `XAI_API_KEY`: required for the planning steps.
+- `ANTHROPIC_API_KEY`: required for the planning steps. It is the app's Claude API key, used only by the app, so do not use it for anything else.
 - `AMPLKEY_UUID`: optional. Without it, the schedule may come from the fallback heuristic.
 
 **Step 7: run.** Start the app so it outlives this command, using tmux if available and `nohup` otherwise. Do not start a second copy if one is already healthy.
@@ -71,7 +71,7 @@ Wait until `curl -fsS http://127.0.0.1:3000/api/health` succeeds and `http://127
 
 - Commit deployed (short hash and subject)
 - URL
-- Status of each of these: MongoDB, Grok API key, AMPL or fallback, speech to text, text to speech
+- Status of each of these: MongoDB, Claude API key, AMPL or fallback, speech to text, text to speech
 - Smoke test results, with one screenshot
 - Anything degraded and what it means for me
 
@@ -83,7 +83,7 @@ To deploy new code when I ask you to update: `git pull --ff-only`, re-run bootst
 
 You are my hands in the app. Pass on my answers faithfully. Do not invent trip details, preferences or budget. When the app asks something I have not answered, ask me. After each step, tell me in a few lines what is on screen and what you need from me, with a screenshot when the view is visual.
 
-The steps timeline on the page (`steps-timeline`) shows where we are. Trips are listed in `trip-list`, and `new-trip` starts another one. Prefer visible labels and roles, and use the `data-testid`s from `design/01-plan.md` when you need them.
+The steps timeline on the page (`steps-timeline`) shows where we are. Trips are listed in `trip-list`, and `new-trip` starts another one. Prefer visible labels and roles, and use the `data-testid`s from `design/04-plan-refined-v2.md` when you need them.
 
 **Step 0: trip intake.** Type my answers in `chat-input` and send them with `chat-send`. The app needs dates, city, plans and an optional budget. No budget limit is valid: tell the app "no budget limit".
 

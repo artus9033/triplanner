@@ -2,7 +2,7 @@ The purpose of this project is a trip planner web app (React web) & backend (Nod
 
 We should be able to run this all in dev mode with autorestart of backend + frontend. Use MongoDB for DB. Always write in typescript, use prettier + lefthook and commitlint.
 
-LLM keys from .env file.
+All LLM calls use the Claude API, with the key in `.env` as `ANTHROPIC_API_KEY`.
 
 ## Runtime target: Grok Bot VM
 
@@ -27,6 +27,66 @@ The app must meet these requirements so a bot can deploy and operate it:
 - **Remote access gate.** If `DEV_ACCESS_PASSWORD` is set, the app and API require it. Tunnel access (see the prompt) is only allowed with this set, because the app has no user accounts and anyone reaching it can spend the LLM key.
 - **Secrets.** `.env` is git-ignored and never logged.
 
+## LLM: Claude API
+
+Grok Bot remains the operator on the VM. The app's own LLM calls all go to the Claude API.
+
+**Libraries**
+
+- `@langchain/anthropic` for the step 0 chat and state filling.
+- The official `@anthropic-ai/sdk` for every web search call (steps 1 and 2). These calls need `pause_turn` handling, refusal handling and citations, which the SDK documents and LangChain's docs do not cover for web search.
+
+**Config constants** (`backend/src/config/llm.ts`)
+
+| Constant | Default | Meaning |
+| --- | --- | --- |
+| `CLAUDE_MODEL` | `claude-opus-5-5` | Model for all calls |
+| `INTAKE_EFFORT` | `low` | Effort for the step 0 chat |
+| `SEARCH_EFFORT` | `medium` | Effort for steps 1 and 2 |
+| `PROPOSAL_SEARCH_MAX_USES` | 10 | Search limit per step 1 request |
+| `PLACE_SEARCH_MAX_USES` | 5 | Search limit per place in step 2 |
+
+Always set effort explicitly. Tune these values against real trips, and record the cost and time per place when doing so.
+
+**The only tool** is exactly this, defined once and used at every search call site:
+
+```ts
+{ type: "web_search_20250305", name: "web_search", max_uses: N }
+```
+
+Use this basic version on purpose. Newer versions (`web_search_20260209` and later) run search through server-side code execution by default, which breaks the "only web search" rule. A test asserts that this is the only tool sent, and that responses contain no code execution blocks. Do not add `web_fetch`.
+
+**Search and extraction are two separate calls**, because web search results always carry citations and the API returns a 400 when citations are enabled with `output_config.format`. The docs do not cover this exact combination, so two calls is the safe design:
+
+1. **Research:** a call with the web search tool and no output format. It returns text with citations. Save the cited URLs and titles.
+2. **Extract:** a `client.messages.parse` call with `output_config.format: zodOutputFormat(schema)`, no tools, and the research text as input. Web content that tries to instruct the model reaches a call with no tools.
+
+Both calls together must fit the 1-minute budget in step 2. Steps 1 and 2 use the same pattern.
+
+**Sources.** The backend, not the model, attaches the cited URLs and titles to each stored place as `sources`. The UI shows them as links on the place card, so the user can check hours and prices at the source.
+
+**Handling every response**
+
+- Branch on `stop_reason` before reading content:
+  - `refusal`: the place fails visibly, with the retry button. The output may not match the schema.
+  - `max_tokens`: the output may be incomplete, so do not store it.
+  - `pause_turn` (research only): send the paused assistant content back unchanged, with the same tools. Cap the number of continuations.
+- Search errors arrive as HTTP 200, with a `web_search_tool_result` whose `content` is an error object instead of a list. Check for this. An empty list means no results, not an error.
+- The research call sends `fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta, so a declined request is re-run on another model. Log which model answered.
+- Treat all web-derived text as untrusted: render it as plain text, and only link `http` and `https` URLs.
+
+**API rules that return a 400 on this model** (LangChain configuration included)
+
+- Do not send `temperature`, `top_p` or `top_k`.
+- Do not send a thinking budget or `thinking: { type: "disabled" }`. Effort is the only control.
+- Do not force a tool with `tool_choice` `any` or `tool`. Use `withStructuredOutput(schema, { method: "jsonSchema" })` in LangChain, not its function calling mode. An integration test covers this with the pinned `@langchain/anthropic` version.
+
+**Schema limits.** Structured outputs do not support numeric or string length constraints. The SDK removes them from the schema it sends and validates them client-side, so the 120-character description limit still holds, and a violation counts as a failed extraction. Compare enum values case-insensitively.
+
+**Health check.** `check:env` and `/api/health` verify the key with the Models API (`client.models.retrieve(CLAUDE_MODEL)`), which uses no tokens. An administrator can disable web search for the organization in the Claude Console. That returns a 400 on the first search, so show it as a clear on-screen error.
+
+**Cost.** Each search costs $0.01 ($10 per 1,000), so up to $0.05 per place in step 2. Tokens are extra: $4 per million input and $20 per million output on Opus 5.5, and search results count as input tokens.
+
 ## Steps
 
 ### 0. Trip intake chat
@@ -42,15 +102,15 @@ A MUI https://mui.com/material-ui/react-timeline/ showing all the steps of plann
 
 ### 1. Place refinement
 
-First step after completion - refinement of the trip plan with the user based on the chat history and the state machine. If the user was not specific about the place, a SpaceXAI Grok LLM over the API with web search tool (NO OTHER TOOLS ALLOWED) should search and propose the places, then the user should be shown a multiselect component with places + 1 link per place to google maps / website if not on google maps. The user should be able to select the places and the state machine should update the trip plan with the selected places.
+First step after completion - refinement of the trip plan with the user based on the chat history and the state machine. If the user was not specific about the place, Claude over the API with web search tool (NO OTHER TOOLS ALLOWED) should search and propose the places, then the user should be shown a multiselect component with places + 1 link per place to google maps / website if not on google maps. The user should be able to select the places and the state machine should update the trip plan with the selected places.
 
 If the user was specific about the places and there is no need for search, this step should skip.
 
-The Grok model ID is a config constant. Tool allowlisting is enforced in code at every call site, not just asked for in the prompt, and a test asserts that `web_search` is the only tool sent.
+Tool allowlisting is enforced in code at every call site, not just asked for in the prompt (see "LLM: Claude API").
 
 ### 2. Place data bots
 
-We spawn predefined number of bots (say in a config constants file, default up to 5) and those bots take the stuff from the trip plan and each uses SpaceXAI Grok LLM over the API with ONLY web search tool to search on place's website and collect the information about the place. The information should be extracted to structured data ONLY pertaining to the possible dates when the user is travelling:
+We spawn predefined number of bots (say in a config constants file, default up to 5) and those bots take the stuff from the trip plan and each uses Claude over the API with ONLY web search tool to search on place's website and collect the information about the place. The information should be extracted to structured data ONLY pertaining to the possible dates when the user is travelling:
 
 ```json
 {
@@ -86,7 +146,9 @@ We spawn predefined number of bots (say in a config constants file, default up t
 
 Fields the bot cannot find are `null`, never invented, and each result is validated with a zod schema before it is stored. `lat`, `lng`, `category` and `visit_duration_min` are needed by the map and the optimizer (02 §4.1); `visit_duration_min` may be `null`, which selects the per-category default.
 
-These bots drain all places to be visited one by one and collect the information about the place. The information is stored in a database. The prompt should say the time budget for each agent is tops 1 minute. The backend also enforces this as a hard timeout, and a place that times out is shown as failed with a retry button.
+These bots drain all places to be visited one by one and collect the information about the place. The information is stored in a database. The prompt should say the time budget for each agent is tops 1 minute. The backend also enforces this as a hard timeout across the research and extract calls together, using one abort signal, because the SDK retries timed-out requests and per-request timeouts could add up to more than a minute. A place that times out is shown as failed with a retry button.
+
+The research prompt prefers the place's official website for hours and prices. No `allowed_domains` filter is set, because coordinates and some ticket details are often on other sites; the stored `sources` show where each result came from.
 
 ### 3. Place review
 
