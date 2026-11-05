@@ -2,10 +2,11 @@
   --text: #1c1b1f;
   --muted: #5f5b66;
   --primary: #3b1d6e;
-  --primary-tint: rgba(59, 29, 110, 0.08);
-  --bg: #ffffff;
-  --surface: #f7f7f8;
-  --rule: rgba(28, 27, 31, 0.12);
+  --primary-tint: rgba(59, 29, 110, 0.12);
+  --bg: #f8f5fd;
+  --surface: #efeaf8;
+  --card: #ffffff;
+  --rule: rgba(59, 29, 110, 0.14);
   --radius: 8px;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
@@ -344,7 +345,7 @@ body {
   padding: 10px 12px;
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--card);
 }
 .option[data-selected="true"] {
   border-color: var(--primary);
@@ -380,10 +381,10 @@ body {
   width: 26px;
   height: 26px;
   box-sizing: border-box;
-  border: 2px solid var(--bg);
+  border: 2px solid var(--card);
   border-radius: 50%;
   background: var(--muted);
-  color: var(--bg);
+  color: var(--card);
   font-size: 11px;
   font-weight: 500;
   line-height: 1;

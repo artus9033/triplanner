@@ -8,7 +8,7 @@ import { useState } from "react";
 
 export const ReservationBadge = ({ needed }: { needed: boolean | null | undefined }) => {
   if (needed === true) {
-    return <Chip size="small" label="Reservation needed" />;
+    return <Chip size="small" color="warning" label="Reservation needed" />;
   }
   if (needed === false) {
     return <Chip size="small" variant="outlined" label="No reservation needed" />;
