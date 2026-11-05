@@ -1,0 +1,13 @@
+# Optional: `pnpm dev` uses this only when Docker works and MongoDB is not already running.
+services:
+  mongo:
+    # Keep in step with MONGOD_VERSION in scripts/lib/mongo.ts.
+    image: docker.io/library/mongo:8.0.34
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
