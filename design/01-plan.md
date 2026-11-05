@@ -52,3 +52,7 @@ These bots drain all places to be visited one by one and collect the information
 4. In the meantime, optimization of trip schedule: using the structured data, we should launch ampl ; this step houses no 3 in the steps timeline from beginning of this plan.
 
 Use plan from 02-optimization-design-out.md as guide to how the optimization should be done.
+
+5. A user should be able to click on the timeline item to see the details of the place and the ticket, on an interactive map in web app.
+
+Final view should show https://mui.com/material-ui/react-timeline/ with the whole trip, hover each should highlight map pin + open popup.
