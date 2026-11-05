@@ -20,6 +20,7 @@ const state: TripState = {
 };
 
 const data: PlaceData = {
+  closed_during_trip: false,
   place: "Louvre",
   category: "museum",
   address: "Rue de Rivoli",
@@ -134,6 +135,18 @@ describe("researchPlace", () => {
     await expect(
       run(happy({ ...data, description: "x".repeat(121) })).result,
     ).rejects.toMatchObject({ code: "extract_failed" });
+  });
+
+  it("requires the model to say whether the place is closed, and stores the answer", async () => {
+    const closed = { ...data, hours: [], closed_during_trip: true };
+    const { requests, result } = run(happy(closed));
+    expect((await result).data.closed_during_trip).toBe(true);
+    const schema = requests.at(-1)!.body.response_format.json_schema.schema;
+    expect(schema.required).toContain("closed_during_trip");
+    const { closed_during_trip: _omitted, ...withoutAnswer } = data;
+    await expect(run(happy(withoutAnswer)).result).rejects.toMatchObject({
+      code: "extract_failed",
+    });
   });
 
   it("keeps a page's own coordinates when geocoding finds nothing", async () => {

@@ -12,6 +12,13 @@ const state: TripState = {
 };
 
 describe.skipIf(!apexApiKey())("researchPlace (live)", () => {
+  it("reports a place shut for renovation as closed", { timeout: 90_000 }, async () => {
+    const { data } = await researchPlace({ name: "Centre Pompidou", note: null, state });
+    console.info(`[live] Pompidou closed=${data.closed_during_trip} hours=${data.hours.length}`);
+    expect(data.closed_during_trip).toBe(true);
+    expect(data.hours).toEqual([]);
+  });
+
   it("researches the Louvre on real pages inside the budget", { timeout: 90_000 }, async () => {
     const result = await researchPlace({ name: "Louvre Museum", note: null, state });
     console.info(

@@ -49,6 +49,8 @@ export const PlaceDataSchema = z.object({
   place_image_url: z.string().nullable(),
   tickets: z.array(TicketSchema),
   needs_reservation: z.boolean().nullable(),
+  /** The place's own pages say it is shut for all the travel dates, e.g. for renovation. */
+  closed_during_trip: z.boolean().optional(),
 });
 export type PlaceData = z.infer<typeof PlaceDataSchema>;
 
