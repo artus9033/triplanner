@@ -1,4 +1,4 @@
-/** Why an Apex call failed. `userMessage` is shown on screen, so it never carries API detail. */
+/** Why an LLM call failed. `userMessage` is shown on screen, so it never carries API detail. */
 export type LlmErrorCode =
   "refusal" | "max_tokens" | "no_pages" | "timeout" | "extract_failed" | "no_key" | "api";
 
@@ -10,8 +10,8 @@ const DEFAULT_MESSAGES: Record<LlmErrorCode, string> = {
     "No web page about this place could be loaded, so its hours and prices could not be checked. You can retry.",
   timeout: "This took longer than the time allowed and was stopped. You can retry.",
   extract_failed: "The AI model's answer could not be turned into valid data. You can retry.",
-  no_key: "No Apex API key is set. Add APEX_API_KEY to .env and restart the app.",
-  api: "The Apex API returned an error. You can retry in a moment.",
+  no_key: "No LLM API key is set. Add LLM_API_KEY to .env and restart the app.",
+  api: "The LLM API returned an error. You can retry in a moment.",
 };
 
 const redact = (text: string): string => text.replace(/\bsk-[\w-]{8,}/g, "[redacted]");
@@ -46,14 +46,14 @@ export const toLlmError = (err: unknown, signal?: AbortSignal): LlmError => {
   const status = typeof e.statusCode === "number" ? e.statusCode : undefined;
   if (status === 401 || status === 403) {
     return new LlmError("api", {
-      userMessage: "The Apex API key was rejected. Check APEX_API_KEY in .env.",
+      userMessage: "The LLM API key was rejected. Check LLM_API_KEY in .env.",
       detail,
       cause: err,
     });
   }
   if (status === 429 || status === 529) {
     return new LlmError("api", {
-      userMessage: "The Apex API is busy right now. You can retry in a moment.",
+      userMessage: "The LLM API is busy right now. You can retry in a moment.",
       detail,
       cause: err,
     });

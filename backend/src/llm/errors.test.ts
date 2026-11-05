@@ -8,7 +8,7 @@ describe("toLlmError", () => {
   });
 
   it("maps statuses, and unwraps the SDK's retry error", () => {
-    expect(toLlmError({ statusCode: 401, message: "x" }).userMessage).toMatch(/APEX_API_KEY/);
+    expect(toLlmError({ statusCode: 401, message: "x" }).userMessage).toMatch(/LLM_API_KEY/);
     expect(toLlmError({ statusCode: 429, message: "x" }).userMessage).toMatch(/busy/);
     const wrapped = { name: "AI_RetryError", lastError: { statusCode: 429, message: "x" } };
     expect(toLlmError(wrapped).userMessage).toMatch(/busy/);

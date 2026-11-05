@@ -3,7 +3,7 @@ import { NamedPlaceSchema, type ChatMessage, type TripState } from "@triplanner/
 import { z } from "zod";
 import { INTAKE_EFFORT, INTAKE_MAX_TOKENS } from "../config/llm";
 import { FX_TO_USD } from "../config/optimizer";
-import { apexModel, effortOptions } from "../llm/client";
+import { llmModel, effortOptions } from "../llm/client";
 import { LlmError, structuredOutputError } from "../llm/errors";
 import { isIsoDate, weekdayOf } from "../llm/validate";
 
@@ -210,7 +210,7 @@ export const advanceIntake = async ({
   let update: IntakeUpdate;
   try {
     const result = await generateText({
-      model: apexModel(),
+      model: llmModel(),
       system: systemPrompt(state, today),
       messages: [
         ...history.map((m) => ({ role: m.role, content: m.content })),

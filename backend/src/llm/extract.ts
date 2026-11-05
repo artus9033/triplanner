@@ -1,7 +1,7 @@
 import { generateText, jsonSchema, Output, type JSONSchema7 } from "ai";
 import { z } from "zod";
 import { EXTRACT_MAX_TOKENS, SEARCH_EFFORT } from "../config/llm";
-import { apexModel, effortOptions } from "./client";
+import { llmModel, effortOptions } from "./client";
 import { LlmError, structuredOutputError } from "./errors";
 import { fromSdkUsage, type LlmUsage } from "./usage";
 
@@ -63,7 +63,7 @@ export const extractStructured = async <S extends z.ZodType>(
   let output: unknown;
   try {
     result = await generateText({
-      model: apexModel(),
+      model: llmModel(),
       system,
       prompt: text,
       output: Output.object({ schema: jsonSchema(wireSchema as JSONSchema7) }),

@@ -1,7 +1,8 @@
-/** Tuning values for all Apex calls, made through the Vercel AI SDK. */
+/** Tuning values for all LLM calls, made through the Vercel AI SDK. */
+/** Used when LLM_BASE_URL and LLM_MODEL are not set. */
 export const APEX_BASE_URL = "https://api.callstack.ai/v1";
 export const APEX_MODEL = "callstack/Apex";
-/** Apex accepts none, low, medium and xhigh. */
+/** Apex accepts none, low, medium and xhigh. Grok's model must also accept these two. */
 export const INTAKE_EFFORT = "low";
 export const SEARCH_EFFORT = "medium";
 /** Page fetches allowed per step 1 request. Apex has no web search, so suggestions lean on these. */

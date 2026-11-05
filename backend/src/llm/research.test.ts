@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { llmBaseUrl, llmModelId } from "../config/env";
 import { RESEARCH_MAX_TOKENS, SEARCH_EFFORT } from "../config/llm";
 import { setApexFetchForTest } from "./client";
 import { PageError, type fetchPage } from "./fetchPage";
@@ -31,8 +32,8 @@ describe("runResearch", () => {
     const { requests, result } = run([chat({ content: "done" })]);
     await result;
     const { url, body } = requests[0]!;
-    expect(url).toBe("https://api.callstack.ai/v1/chat/completions");
-    expect(body.model).toBe("callstack/Apex");
+    expect(url).toBe(`${llmBaseUrl()}/chat/completions`);
+    expect(body.model).toBe(llmModelId());
     expect(body.reasoning_effort).toBe(SEARCH_EFFORT);
     expect(body.max_tokens).toBe(RESEARCH_MAX_TOKENS);
     expect(body.tools.map((t: any) => t.function.name)).toEqual(["fetch_page"]);

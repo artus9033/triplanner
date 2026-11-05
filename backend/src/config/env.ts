@@ -2,6 +2,7 @@ import { accessSync, constants, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { APEX_BASE_URL, APEX_MODEL } from "./llm";
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -14,8 +15,13 @@ const clean = (value: string | undefined): string | undefined => {
   return trimmed ? trimmed : undefined;
 };
 
-/** The Apex API key. */
-export const apexApiKey = (): string | undefined => clean(process.env.APEX_API_KEY);
+/** The LLM API key. APEX_API_KEY is the older name and still works. */
+export const llmApiKey = (): string | undefined =>
+  clean(process.env.LLM_API_KEY) ?? clean(process.env.APEX_API_KEY);
+
+export const llmBaseUrl = (): string => clean(process.env.LLM_BASE_URL) ?? APEX_BASE_URL;
+
+export const llmModelId = (): string => clean(process.env.LLM_MODEL) ?? APEX_MODEL;
 
 export const devAccessPassword = (): string | undefined => clean(process.env.DEV_ACCESS_PASSWORD);
 

@@ -33,5 +33,6 @@ export const envValue = (env: NodeJS.ProcessEnv, key: string): string | undefine
   return value ? value : undefined;
 };
 
-export const apexKeyFrom = (env: NodeJS.ProcessEnv): string | undefined =>
-  envValue(env, "APEX_API_KEY");
+/** APEX_API_KEY is the older name and still works. */
+export const llmKeyFrom = (env: NodeJS.ProcessEnv): string | undefined =>
+  envValue(env, "LLM_API_KEY") ?? envValue(env, "APEX_API_KEY");

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { findAmplBin, amplEnv, trivialSolve } from "./ampl.ts";
-import { apexKeyFrom, envFilePath, envValue } from "./env-file.ts";
+import { llmKeyFrom, envFilePath, envValue } from "./env-file.ts";
 import { run } from "./exec.ts";
 import { dockerWorks, findMongod, mongoTargetFrom, probeTarget } from "./mongo.ts";
 import { REPO_ROOT } from "./paths.ts";
@@ -176,18 +176,18 @@ const backendRows = async (
 };
 
 const keyPresenceRow = (env: NodeJS.ProcessEnv): StatusRow =>
-  apexKeyFrom(env)
+  llmKeyFrom(env)
     ? {
-        feature: "Apex API key",
+        feature: "LLM API key",
         status: "degraded",
         required: true,
         detail: "set, but not verified",
       }
     : {
-        feature: "Apex API key",
+        feature: "LLM API key",
         status: "missing",
         required: true,
-        detail: "APEX_API_KEY is not set in .env",
+        detail: "LLM_API_KEY is not set in .env",
       };
 
 const accessRow = (env: NodeJS.ProcessEnv): StatusRow =>

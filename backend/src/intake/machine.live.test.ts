@@ -1,6 +1,6 @@
 import { emptyTripState, type ChatMessage, type TripState } from "@triplanner/shared";
 import { describe, expect, it } from "vitest";
-import { apexApiKey } from "../config/env";
+import { llmApiKey } from "../config/env";
 import { advanceIntake } from "./machine";
 
 const today = "2026-11-05";
@@ -28,7 +28,7 @@ const chat = async (lines: string[]) => {
 
 const trip = "I'm going to Paris from 2026-11-19 to 2026-11-21.";
 
-describe.skipIf(!apexApiKey())("advanceIntake (live)", () => {
+describe.skipIf(!llmApiKey())("advanceIntake (live)", () => {
   it(
     "a guided multi-turn chat, ending with a 'no limit' budget",
     { timeout: timeout * 2 },

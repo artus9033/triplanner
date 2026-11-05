@@ -10,17 +10,21 @@ You need Node 24.9.0 and pnpm 12.6.0.
 
 ```bash
 pnpm run bootstrap        # installs everything and creates .env
-# set APEX_API_KEY in .env
+```
+
+Put your LLM API key in `.env` as `LLM_API_KEY`. The default connector is Grok. To use another OpenAI-compatible API, change `LLM_BASE_URL` and `LLM_MODEL`.
+
+```bash
 pnpm dev
 ```
 
 Open http://127.0.0.1:5173.
 
-To try it without a key, run `pnpm run seed:demo` while `pnpm dev` is running, then open http://127.0.0.1:5173/trips/demo-paris. This is the trip shown above. Its hours and prices are made up.
+To try it without a key, run `pnpm run seed:demo` while `pnpm dev` is running, then open http://127.0.0.1:5173/trips/demo-paris. Its hours and prices are made up.
 
 ## What this is
 
-A trip planner. A chat collects your dates, city, plans and budget. Bots read each place's web pages for hours and tickets using Apex, an LLM. An optimizer (AMPL with HiGHS) then builds a schedule, shown on a timeline and a map.
+A trip planner. A chat collects your dates, city, plans and budget. Bots read each place's web pages for hours and tickets using an LLM. An optimizer (AMPL with HiGHS) then builds a schedule, shown on a timeline and a map.
 
 ## Commands
 

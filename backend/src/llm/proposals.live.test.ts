@@ -1,6 +1,6 @@
 import { emptyTripState, PlaceProposalSchema, type TripState } from "@triplanner/shared";
 import { describe, expect, it } from "vitest";
-import { apexApiKey } from "../config/env";
+import { llmApiKey } from "../config/env";
 import { isSamePlaceName, proposePlaces } from "./proposals";
 
 const state: TripState = {
@@ -14,7 +14,7 @@ const state: TripState = {
   budget_answered: true,
 };
 
-describe.skipIf(!apexApiKey())("proposePlaces (live)", () => {
+describe.skipIf(!llmApiKey())("proposePlaces (live)", () => {
   it("proposes valid options with one safe link", { timeout: 120_000 }, async () => {
     const startedAt = Date.now();
     const proposals = await proposePlaces({ state, messages: [], maxFetches: 1 });

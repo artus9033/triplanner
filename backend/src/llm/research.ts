@@ -2,7 +2,7 @@ import { generateText, stepCountIs, tool } from "ai";
 import type { Source } from "@triplanner/shared";
 import { z } from "zod";
 import { RESEARCH_MAX_TOKENS, SEARCH_EFFORT } from "../config/llm";
-import { apexModel, effortOptions } from "./client";
+import { llmModel, effortOptions } from "./client";
 import { LlmError, toLlmError } from "./errors";
 import { fetchPage, PageError, type FetchedPage } from "./fetchPage";
 import { fromSdkUsage, type LlmUsage } from "./usage";
@@ -69,7 +69,7 @@ export const runResearch = async ({
   let result;
   try {
     result = await generateText({
-      model: apexModel(),
+      model: llmModel(),
       system,
       prompt,
       tools: { fetch_page: fetchTool },

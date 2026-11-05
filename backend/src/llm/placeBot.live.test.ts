@@ -1,6 +1,6 @@
 import { emptyTripState, PlaceDataSchema, type TripState } from "@triplanner/shared";
 import { describe, expect, it } from "vitest";
-import { apexApiKey } from "../config/env";
+import { llmApiKey } from "../config/env";
 import { BOT_TIME_BUDGET_MS } from "../config/optimizer";
 import { researchPlace } from "./placeBot";
 
@@ -11,7 +11,7 @@ const state: TripState = {
   end_date: "2026-11-21",
 };
 
-describe.skipIf(!apexApiKey())("researchPlace (live)", () => {
+describe.skipIf(!llmApiKey())("researchPlace (live)", () => {
   it("reports a place shut for renovation as closed", { timeout: 90_000 }, async () => {
     const { data } = await researchPlace({ name: "Centre Pompidou", note: null, state });
     console.info(`[live] Pompidou closed=${data.closed_during_trip} hours=${data.hours.length}`);

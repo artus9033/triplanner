@@ -1,6 +1,7 @@
 import { emptyTripState, type TripState } from "@triplanner/shared";
 import { afterEach, describe, expect, it } from "vitest";
-import { APEX_MODEL, INTAKE_EFFORT } from "../config/llm";
+import { llmBaseUrl, llmModelId } from "../config/env";
+import { INTAKE_EFFORT } from "../config/llm";
 import { setApexFetchForTest } from "../llm/client";
 import { chat, fakeFetch, jsonResponse } from "../llm/testApi";
 import {
@@ -173,8 +174,8 @@ describe("advanceIntake over the AI SDK", () => {
       today,
     });
     const { body, url } = requests[0]!;
-    expect(url).toBe("https://api.callstack.ai/v1/chat/completions");
-    expect(body.model).toBe(APEX_MODEL);
+    expect(url).toBe(`${llmBaseUrl()}/chat/completions`);
+    expect(body.model).toBe(llmModelId());
     expect(body.reasoning_effort).toBe(INTAKE_EFFORT);
     expect(body.response_format.type).toBe("json_schema");
     for (const key of ["temperature", "top_p", "top_k", "tool_choice", "tools"]) {
