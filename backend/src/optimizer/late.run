@@ -1,0 +1,5 @@
+# Latest starts from pass 3.
+printf "BEGIN,late\n" >> solution.csv;
+printf {p in P: visited[p] = 1} "L,%s,%.6f\n", p, s[p] >> solution.csv;
+printf "END\n" >> solution.csv;
+close solution.csv;

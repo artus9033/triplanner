@@ -1,0 +1,7 @@
+# Usable values: solved (0-99) or a limit with a feasible incumbent (400-449). HiGHS reports a limit
+# with no solution as 470-499, and then the variable values are not a solution at all.
+let passOk := if solve_result_num >= 0 and (solve_result_num < 100
+  or (solve_result_num >= 400 and solve_result_num < 450)) then 1 else 0;
+printf "PASS,%s,%s,%d,%.9g,%.9g,%.3f,%d\n",
+  passName, solve_result, solve_result_num, passObjective, passGap, _solve_elapsed_time, passOk >> passes.csv;
+close passes.csv;

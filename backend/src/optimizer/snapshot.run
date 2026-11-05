@@ -1,0 +1,6 @@
+# One complete solution. The parser ignores a section with no closing END line.
+printf "BEGIN,%s\n", passName >> solution.csv;
+printf {(p, d) in PD: y[p, d] > 0.5} "V,%s,%d,%.6f,%d\n", p, d, s[p], round(w[p]) >> solution.csv;
+printf {(p, k) in TK: z[p, k] > 0.5} "T,%s,%s\n", p, k >> solution.csv;
+printf "END\n" >> solution.csv;
+close solution.csv;

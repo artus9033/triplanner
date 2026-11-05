@@ -1,0 +1,87 @@
+# Driver: three lexicographic passes (design 02 §4.4), run with cwd = a per-run temp dir holding
+# trip.mod, trip.dat and the included .run files. Every pass that produced a solution appends a complete,
+# self-terminated section to solution.csv, so a kill at the wall clock still leaves the last one.
+#
+# TRIP_TIME_LIMIT_S is the budget of the whole script, not of one solve.
+
+model trip.mod;
+data trip.dat;
+
+option solver highs;
+option show_stats 0;
+
+# Declared here because a model AMPL's presolve settles alone never reaches the solver that adds it.
+suffix relmipgap OUT;
+
+param timeLimit;
+let timeLimit := num($TRIP_TIME_LIMIT_S);
+param passName symbolic;
+param passObjective default 0;
+param passGap default 0;
+param passOk binary default 0;
+
+drop FixCoverage;
+drop FixFinish;
+
+# ---------- pass 1: coverage ----------
+option highs_options ('lim:time=' & max(0.05, 0.5 * (timeLimit - _ampl_elapsed_time - _total_solve_elapsed_time)) & ' mip:gap=1e-7 mip:return_gap=1');
+objective MaxCoverage;
+solve;
+let passName := 'coverage';
+let passObjective := MaxCoverage;
+let passGap := MaxCoverage.relmipgap;
+commands record_pass.run;
+
+if solve_result_num >= 200 and solve_result_num < 400 or solve_result = 'infeasible' then {
+  # §4.7: the cause is in MUST. The musts still unvisited here are the ones that cannot fit.
+  drop Mandatory;
+  option highs_options ('lim:time=' & max(0.05, 0.5 * (timeLimit - _ampl_elapsed_time - _total_solve_elapsed_time)) & ' mip:gap=1e-7 mip:return_gap=1');
+  objective MaxElastic;
+  solve;
+  let passName := 'elastic';
+  let passObjective := MaxElastic;
+  let passGap := MaxElastic.relmipgap;
+  commands record_pass.run;
+}
+
+if passOk = 0 then { exit 3; }
+let Z1 := sum {(p, d) in PD} (u[p] + (if p in MUST then PI else 0)) * y[p, d];
+commands snapshot.run;
+
+# ---------- pass 2: compactness ----------
+restore FixCoverage;
+option highs_options ('lim:time=' & max(0.05, 0.9 * (timeLimit - _ampl_elapsed_time - _total_solve_elapsed_time)) & ' mip:gap=1e-4 mip:return_gap=1');
+objective MinFriction;
+solve;
+let passName := 'compactness';
+let passObjective := MinFriction;
+let passGap := MinFriction.relmipgap;
+commands record_pass.run;
+if passOk = 0 then { exit 0; }
+commands snapshot.run;
+
+# ---------- pass 3: latest starts, on the fixed sequence ----------
+# Everything discrete is fixed, only s and F move. With y or x free a visit could change day, which
+# would put s_late - s_early off by about 1440.
+let {p in P} visited[p] := if sum {(p, d) in PD} y[p, d] > 0.5 then 1 else 0;
+let {d in DAYS} Fstar[d] := F[d];
+fix {(p, d) in PD} y[p, d] := round(y[p, d]);
+fix {(p, d) in STARTS} xStart[p, d] := round(xStart[p, d]);
+fix {(p, d) in STARTS} xEnd[p, d] := round(xEnd[p, d]);
+fix {(i, j, d) in LEGS} x[i, j, d] := round(x[i, j, d]);
+fix {d in DAYS} a[d] := round(a[d]);
+fix {(p, k) in TK} z[p, k] := round(z[p, k]);
+fix {p in P} w[p] := round(w[p]);
+fix {p in P: visited[p] = 0} s[p] := 0;
+drop FixCoverage;
+restore FixFinish;
+option highs_options ('lim:time=' & max(0.05, timeLimit - _ampl_elapsed_time - _total_solve_elapsed_time));
+objective MaxStarts;
+solve;
+let passName := 'slack';
+let passObjective := MaxStarts;
+let passGap := 0;
+commands record_pass.run;
+if passOk = 0 then { exit 0; }
+commands late.run;
+exit 0;
