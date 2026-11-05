@@ -1,8 +1,8 @@
 # Triplanner
 
-[![Triplanner demo: planning two days in Las Vegas. Select to watch the full video with sound.](demo-preview.gif)](demo.mp4)
+[![Triplanner demo: planning two days in Las Vegas. Select to watch the full video with sound.](demo-preview.gif)](https://youtu.be/hgZqPLEmYHA)
 
-[Watch the full demo with sound (53 s)](demo.mp4)
+[Watch the full demo with sound (53 s)](https://youtu.be/hgZqPLEmYHA)
 
 ## Setup
 
