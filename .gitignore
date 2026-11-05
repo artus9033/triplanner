@@ -1,1 +1,12 @@
 .env
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.data/
+.tools/
+.models/
+*.tsbuildinfo
+keys/
+.vitest/

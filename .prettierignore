@@ -1,0 +1,6 @@
+design/
+pnpm-lock.yaml
+dist/
+coverage/
+keys/
+.vitest/

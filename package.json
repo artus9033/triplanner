@@ -1,0 +1,31 @@
+{
+  "name": "triplanner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24.9.0"
+  },
+  "scripts": {
+    "bootstrap": "node scripts/bootstrap.ts",
+    "dev": "node scripts/dev.ts",
+    "check:env": "node scripts/check-env.ts",
+    "seed:demo": "pnpm --filter @triplanner/backend run seed:demo",
+    "test": "vitest run",
+    "test:fast": "vitest run --exclude '**/*.live.test.ts'",
+    "test:live": "vitest run --project backend '.live.test'",
+    "typecheck": "pnpm -r run typecheck && tsc -p scripts/tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@types/node": "^24.9.0",
+    "lefthook": "^2.2.2",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
