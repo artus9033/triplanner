@@ -17,7 +17,7 @@ export const MODE_SPEEDS = { walking: 4.5, transit: 18, driving: 30 };
 /** Used for travel to or from a place with no coordinates; reported as a warning. */
 export const UNKNOWN_TRAVEL_MIN = 30;
 export const LAMBDA_TRAVEL = 1;
-export const LAMBDA_L1 = 0.001;
+export const LAMBDA_L1 = 0.02;
 export const SHORTEN_BUDGET = 0;
 /** Q when the user asks to "fit more in". */
 export const SHORTEN_BUDGET_ALLOWED = 3;

@@ -47,7 +47,7 @@ export class InstanceError extends Error {}
 
 /**
  * Keeps ticket choice sensible when there is no budget: the design has lamCost = 0 then, which would
- * leave a paid ticket and a free one tied. Too small to move a visit (a day's move costs 1.44 in L1).
+ * leave a paid ticket and a free one tied. Too small to move a visit (a day's move costs 28.8 in L1).
  */
 const NO_BUDGET_TICKET_TIEBREAK = 1e-4;
 const MINUTES_PER_DAY = 1440;
