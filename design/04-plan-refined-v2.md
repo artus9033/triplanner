@@ -2,7 +2,7 @@ The purpose of this project is a trip planner web app (React web) & backend (Nod
 
 We should be able to run this all in dev mode with autorestart of backend + frontend. Use MongoDB for DB. Always write in typescript, use prettier + lefthook and commitlint.
 
-All LLM calls use the Claude API, with the key in `.env` as `ANTHROPIC_API_KEY`.
+All LLM calls use Apex through the Vercel AI SDK, with the key in `.env` as `APEX_API_KEY`. This replaces the Claude API; see "LLM: Apex", which supersedes "LLM: Claude API" below wherever they differ.
 
 ## Runtime target: Grok Bot VM
 
@@ -27,7 +27,25 @@ The app must meet these requirements so a bot can deploy and operate it:
 - **Remote access gate.** If `DEV_ACCESS_PASSWORD` is set, the app and API require it. Tunnel access (see the prompt) is only allowed with this set, because the app has no user accounts and anyone reaching it can spend the LLM key.
 - **Secrets.** `.env` is git-ignored and never logged.
 
-## LLM: Claude API
+## LLM: Apex
+
+Apex replaced the Claude API. It is an OpenAI-compatible endpoint (`https://api.callstack.ai/v1`, model `callstack/Apex`), used through the Vercel AI SDK. Constants are in `backend/src/config/llm.ts`. These facts were checked against the live API:
+
+- **Use `provider.chat(...)`.** The SDK's default `/responses` route returns a 400 on the follow-up request of a tool loop.
+- **Effort goes in `providerOptions.openai.reasoningEffort`.** The key `callstack` is dropped silently, so the request runs at the default effort.
+- **Apex has no web search.** A `web_search` tool is accepted and ignored. It also believes the date is months earlier than it is, so prompts state the date.
+
+**Research.** The only tool is `fetch_page`, which runs in the backend and loads a public page by URL. It rejects private and internal addresses, re-checks each redirect, and limits size and time.
+
+**Hours and prices come from pages, not memory.** The extract call has no tools and receives only the text of pages that loaded, not the model's notes. A place with no loaded page fails visibly with a retry button. `sources` lists only pages that loaded.
+
+**Step 1 is weaker than the original design.** With no search, suggestions come from what the model knows, checked against pages when it fetches any. Step 2 then verifies each chosen place on real pages. Adding a search API would mean adding a second tool beside `fetch_page`.
+
+**Coordinates and links are not from the model.** Coordinates come from OpenStreetMap Nominatim, one request per second as its usage policy requires. Google Maps links are search URLs built from the name.
+
+## LLM: Claude API (superseded)
+
+The rest of this section describes the original design, and is kept for reference.
 
 Grok Bot remains the operator on the VM. The app's own LLM calls all go to the Claude API.
 

@@ -54,7 +54,7 @@ cd "$BASE/triplanner" && pnpm run bootstrap
 
 **Step 6: secrets for the app.** Using the same method as step 2, get these values into `.env` without displaying them, and make sure the file has mode 600 and is git-ignored:
 
-- `ANTHROPIC_API_KEY`: required for the planning steps. It is the app's Claude API key, used only by the app, so do not use it for anything else.
+- `APEX_API_KEY`: required for the planning steps. It is the app's Apex API key, used only by the app, so do not use it for anything else.
 - `AMPLKEY_UUID`: optional. Without it, the schedule may come from the fallback heuristic.
 
 **Step 7: run.** Start the app so it outlives this command, using tmux if available and `nohup` otherwise. Do not start a second copy if one is already healthy.
@@ -71,7 +71,7 @@ Wait until `curl -fsS http://127.0.0.1:3000/api/health` succeeds and `http://127
 
 - Commit deployed (short hash and subject)
 - URL
-- Status of each of these: MongoDB, Claude API key, AMPL or fallback, speech to text, text to speech
+- Status of each of these: MongoDB, Apex API key, AMPL or fallback, speech to text, text to speech
 - Smoke test results, with one screenshot
 - Anything degraded and what it means for me
 

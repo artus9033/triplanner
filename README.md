@@ -1,6 +1,6 @@
 # Triplanner
 
-A trip planner: a chat collects your dates, city, plans and budget, bots research each place's hours and tickets through the Claude API, and an optimizer (AMPL with HiGHS, or a heuristic fallback) builds a day-by-day schedule shown on a timeline and a map. Every trip has its own URL (`/trips/:id`) and all progress lives in MongoDB, so a reload or another browser shows the same trip and step.
+A trip planner: a chat collects your dates, city, plans and budget, bots read each place's real web pages for hours and tickets through Apex (an LLM used via the Vercel AI SDK), and an optimizer (AMPL with HiGHS, or a heuristic fallback) builds a day-by-day schedule shown on a timeline and a map. Every trip has its own URL (`/trips/:id`) and all progress lives in MongoDB, so a reload or another browser shows the same trip and step.
 
 It runs in dev mode with autorestart. Nothing below needs root or Docker. The design is in [design/04-plan-refined-v2.md](design/04-plan-refined-v2.md).
 
@@ -29,7 +29,7 @@ Typical first run:
 
 ```bash
 pnpm run bootstrap
-# put ANTHROPIC_API_KEY in .env, keep the file at mode 600
+# put APEX_API_KEY in .env, keep the file at mode 600
 pnpm run check:env
 pnpm dev
 pnpm run seed:demo   # in another terminal
@@ -67,16 +67,16 @@ A MongoDB that this run started (step 2 or 3) is stopped on exit, and its data s
 
 Set these in `.env`, which is git-ignored. Variables already in the environment win. Values are never printed.
 
-| Variable                                  | Required           | Purpose                                                                                                |
-| ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
-| `ANTHROPIC_API_KEY` (or `CLAUDE_API_KEY`) | For planning steps | The app's Claude API key.                                                                              |
-| `AMPLKEY_UUID`                            | No                 | AMPL Community Edition licence. Without it AMPL runs on its demo licence. Bootstrap activates it once. |
-| `DEV_ACCESS_PASSWORD`                     | Before any tunnel  | Gates the app and API.                                                                                 |
-| `PORT`, `WEB_PORT`                        | No                 | Backend and frontend ports.                                                                            |
-| `MONGODB_URI`                             | No                 | Default `mongodb://127.0.0.1:27017/triplanner`.                                                        |
-| `TOOLS_DIR`                               | No                 | Default `/workspace/.tools` when `/workspace` is writable, else `~/.tools`.                            |
-| `AMPL_BIN`                                | No                 | Use this AMPL binary instead of the venv's.                                                            |
-| `SKIP_SPEECH_LIVE`                        | No                 | `1` skips the live speech test.                                                                        |
+| Variable              | Required           | Purpose                                                                                                |
+| --------------------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
+| `APEX_API_KEY`        | For planning steps | The app's Apex API key.                                                                                |
+| `AMPLKEY_UUID`        | No                 | AMPL Community Edition licence. Without it AMPL runs on its demo licence. Bootstrap activates it once. |
+| `DEV_ACCESS_PASSWORD` | Before any tunnel  | Gates the app and API.                                                                                 |
+| `PORT`, `WEB_PORT`    | No                 | Backend and frontend ports.                                                                            |
+| `MONGODB_URI`         | No                 | Default `mongodb://127.0.0.1:27017/triplanner`.                                                        |
+| `TOOLS_DIR`           | No                 | Default `/workspace/.tools` when `/workspace` is writable, else `~/.tools`.                            |
+| `AMPL_BIN`            | No                 | Use this AMPL binary instead of the venv's.                                                            |
+| `SKIP_SPEECH_LIVE`    | No                 | `1` skips the live speech test.                                                                        |
 
 `TOOLS_DIR` holds `ampl-venv/`, `models/` (speech), `mongodb-<version>/` when the tarball was needed, `mongodb-data/` and `mongod.log`.
 
@@ -84,7 +84,7 @@ Set these in `.env`, which is git-ignored. Variables already in the environment 
 
 | Feature               | Without it                                                                                                                                                             | Status     |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| Claude API key        | Planning steps fail with on-screen errors. The demo trip still works. `check:env` exits nonzero.                                                                       | `missing`  |
+| Apex API key          | Planning steps fail with on-screen errors. The demo trip still works. `check:env` exits nonzero.                                                                       | `missing`  |
 | MongoDB               | The app cannot start. A server that is merely not running yet shows `degraded`, because `pnpm dev` will start it. With no way to start one, `check:env` exits nonzero. | `missing`  |
 | AMPL / HiGHS          | Schedules come from the fallback heuristic, and the UI says so. With no Python, bootstrap reports this rather than failing.                                            | `degraded` |
 | Speech models         | Downloaded on first use: about 130 MB in total, into `TOOLS_DIR/models`. Voice controls are disabled with a reason until then. The rest of the app is unaffected.      | `degraded` |
@@ -94,19 +94,23 @@ Set these in `.env`, which is git-ignored. Variables already in the environment 
 
 Voice needs no microphone or speakers on the server. The speech models are English: Whisper tiny.en for speech to text and Kokoro (voice `af_heart`) for text to speech, both running on CPU. Text to read aloud is limited to 1,000 characters, and audio to transcribe to 10 minutes.
 
-### Limitation: a "ready" key does not prove the key can pay
+### Limitation: a "ready" key does not prove inference works
 
-`check:env` and `/api/health` verify the key with the Models API, which uses no tokens. That call succeeds for a valid key even when the account has **no credits**. The table then shows `Claude API key  ready  key valid`, while every planning call fails with a 400 "credit balance is too low".
+`check:env` and `/api/health` verify the key with the model list, which uses no tokens. A key that is valid but out of quota would still show `ready`. The first real check is the first chat message. The demo trip uses no LLM calls and cannot detect this either.
 
-So `ready` means the key is valid and the model is available, not that inference will work. The first real check is the first chat message. The demo trip uses no LLM calls and cannot detect this either.
+### Limitation: Apex has no web search
+
+Place data comes from real pages that the backend fetches for the model, and the sources shown are the pages that loaded. A site that blocks the fetch, or a place whose site the model does not know, can fail with a visible error and a retry button. Suggestions in step 1 come from what the model knows, so they are checked only when the place is researched in step 2. Details are in [design/04-plan-refined-v2.md](design/04-plan-refined-v2.md).
+
+Each bot makes outbound requests to the sites the model picks, and to OpenStreetMap Nominatim for coordinates, so the machine needs internet access. Private and internal addresses are refused.
 
 ## Tests
 
-| Command          | What it runs                                                                                                                                |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm test`      | Everything, including live tests. The LLM ones spend API credit and need a key with credits. The speech one downloads the models if needed. |
-| `pnpm test:fast` | Everything except `*.live.test.ts`. No network or credit needed.                                                                            |
-| `pnpm test:live` | Only the backend's `*.live.test.ts`.                                                                                                        |
+| Command          | What it runs                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm test`      | Everything, including live tests. The LLM ones make real Apex calls and need a working key. The speech one downloads the models if needed. |
+| `pnpm test:fast` | Everything except `*.live.test.ts`. No network or credit needed.                                                                           |
+| `pnpm test:live` | Only the backend's `*.live.test.ts`.                                                                                                       |
 
 Tests that need a database start a throwaway MongoDB and never touch your data.
 
