@@ -33,5 +33,5 @@ export const envValue = (env: NodeJS.ProcessEnv, key: string): string | undefine
   return value ? value : undefined;
 };
 
-export const anthropicKeyFrom = (env: NodeJS.ProcessEnv): string | undefined =>
-  envValue(env, "ANTHROPIC_API_KEY") ?? envValue(env, "CLAUDE_API_KEY");
+export const apexKeyFrom = (env: NodeJS.ProcessEnv): string | undefined =>
+  envValue(env, "APEX_API_KEY");

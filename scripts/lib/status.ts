@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { findAmplBin, amplEnv, trivialSolve } from "./ampl.ts";
-import { anthropicKeyFrom, envFilePath, envValue } from "./env-file.ts";
+import { apexKeyFrom, envFilePath, envValue } from "./env-file.ts";
 import { run } from "./exec.ts";
 import { dockerWorks, findMongod, mongoTargetFrom, probeTarget } from "./mongo.ts";
 import { REPO_ROOT } from "./paths.ts";
@@ -176,18 +176,18 @@ const backendRows = async (
 };
 
 const keyPresenceRow = (env: NodeJS.ProcessEnv): StatusRow =>
-  anthropicKeyFrom(env)
+  apexKeyFrom(env)
     ? {
-        feature: "Claude API key",
+        feature: "Apex API key",
         status: "degraded",
         required: true,
         detail: "set, but not verified",
       }
     : {
-        feature: "Claude API key",
+        feature: "Apex API key",
         status: "missing",
         required: true,
-        detail: "ANTHROPIC_API_KEY is not set in .env",
+        detail: "APEX_API_KEY is not set in .env",
       };
 
 const accessRow = (env: NodeJS.ProcessEnv): StatusRow =>

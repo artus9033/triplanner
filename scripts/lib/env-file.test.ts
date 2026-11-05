@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anthropicKeyFrom, envValue, mergeEnv, parseEnvText } from "./env-file.ts";
+import { apexKeyFrom, envValue, mergeEnv, parseEnvText } from "./env-file.ts";
 
 describe("env-file helpers", () => {
   it("parses comments, blanks, quotes and values containing =", () => {
@@ -15,7 +15,8 @@ describe("env-file helpers", () => {
 
   it("treats blank values as unset, and accepts the key alias", () => {
     expect(envValue({ A: "  " }, "A")).toBeUndefined();
-    expect(anthropicKeyFrom({ ANTHROPIC_API_KEY: "", CLAUDE_API_KEY: "k" })).toBe("k");
-    expect(anthropicKeyFrom({})).toBeUndefined();
+    expect(apexKeyFrom({ APEX_API_KEY: "k" })).toBe("k");
+    expect(apexKeyFrom({ APEX_API_KEY: "" })).toBeUndefined();
+    expect(apexKeyFrom({})).toBeUndefined();
   });
 });

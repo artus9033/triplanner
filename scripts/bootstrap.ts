@@ -49,7 +49,7 @@ if (existsSync(envFile)) {
   // COPYFILE_EXCL makes this fail rather than overwrite, even in a race with another process.
   copyFileSync(path.join(REPO_ROOT, ".env.example"), envFile, constants.COPYFILE_EXCL);
   chmodSync(envFile, 0o600);
-  log("Created .env from .env.example (mode 600). Fill in ANTHROPIC_API_KEY.");
+  log("Created .env from .env.example (mode 600). Fill in APEX_API_KEY.");
 }
 
 const env = loadRepoEnv();
