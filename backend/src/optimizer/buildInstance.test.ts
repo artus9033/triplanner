@@ -169,12 +169,57 @@ describe("hours", () => {
     expect(built.warnings.filter((w) => /treated as closed/.test(w))).toHaveLength(2);
   });
 
-  it("reports all-unusable hours as no_hours_data", () => {
-    const built = buildInstance({
-      state: makeState(MON, MON),
-      places: [makePlace("A", { hours: [{ date: MON, start: "22:00", end: "02:00" }] })],
+  describe("when no hours were found", () => {
+    const MID = 0;
+    const windowsFor = (
+      data: Parameters<typeof makePlace>[1],
+      dayWindow?: { start: string; end: string },
+    ) =>
+      buildInstance(
+        { state: makeState(MON, TUE), places: [makePlace("A", data)] },
+        dayWindow ? { dayWindow } : {},
+      );
+
+    it("assumes daytime on every trip day, clamped to the daily window, with a warning", () => {
+      const built = windowsFor({ hours: [] });
+      const [place] = built.instance.places;
+      expect(built.presolveDropped).toEqual([]);
+      expect(place?.hoursAssumed).toBe(true);
+      expect(place?.windows).toEqual([
+        { day: 1, open: MID + 540, close: MID + 1200 },
+        { day: 2, open: 1440 + 540, close: 1440 + 1200 },
+      ]);
+      expect(built.warnings.join()).toMatch(/assuming 08:00-22:00/);
     });
-    expect(built.presolveDropped[0]?.reason).toBe("no_hours_data");
+
+    it("uses the assumed 08:00-22:00 in full when the daily window is wider", () => {
+      const built = windowsFor({ hours: [] }, { start: "06:00", end: "23:30" });
+      expect(built.instance.places[0]?.windows[0]).toEqual({ day: 1, open: 480, close: 1320 });
+    });
+
+    it("treats all-unusable hours the same way", () => {
+      const built = windowsFor({ hours: [{ date: MON, start: "22:00", end: "02:00" }] });
+      expect(built.presolveDropped).toEqual([]);
+      expect(built.instance.places[0]?.hoursAssumed).toBe(true);
+    });
+
+    it("keeps a place out when its own pages say it is closed", () => {
+      const built = windowsFor({ hours: [], closed_during_trip: true });
+      expect(built.instance.places).toEqual([]);
+      expect(built.presolveDropped[0]).toMatchObject({ reason: "closed_on_trip_dates" });
+    });
+
+    it("still reads a missing date as closed when other dates have hours", () => {
+      const built = windowsFor({ hours: hoursOn([TUE]) });
+      const [place] = built.instance.places;
+      expect(place?.hoursAssumed).toBeUndefined();
+      expect(place?.windows.map((w) => w.day)).toEqual([2]);
+    });
+
+    it("reports a daily window too small for the visit", () => {
+      const built = windowsFor({ hours: [] }, { start: "21:30", end: "23:00" });
+      expect(built.presolveDropped[0]).toMatchObject({ reason: "outside_daily_envelope" });
+    });
   });
 
   it("clamps to the envelope, and uses the longest part of a split day", () => {

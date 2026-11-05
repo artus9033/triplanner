@@ -39,6 +39,8 @@ Apex replaced the Claude API. It is an OpenAI-compatible endpoint (`https://api.
 
 **Hours and prices come from pages, not memory.** The extract call has no tools and receives only the text of pages that loaded, not the model's notes. A place with no loaded page fails visibly with a retry button. `sources` lists only pages that loaded.
 
+**No hours found is not the same as closed.** A place with no usable hours is assumed open 08:00–22:00 on every trip day, within the daily window, and the UI marks that visit "hours not confirmed". This replaces design 02's rule for that one case. A missing date still means closed when other dates have hours, and a place whose own pages say it is shut for the whole trip stays out of the schedule.
+
 **Step 1 is weaker than the original design.** With no search, suggestions come from what the model knows, checked against pages when it fetches any. Step 2 then verifies each chosen place on real pages. Adding a search API would mean adding a second tool beside `fetch_page`.
 
 **Coordinates and links are not from the model.** Coordinates come from OpenStreetMap Nominatim, one request per second as its usage policy requires. Google Maps links are search URLs built from the name.

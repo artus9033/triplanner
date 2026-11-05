@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** Hours assumed for a place when none could be found. The daily window still applies on top. */
+export const ASSUMED_OPEN_HOURS = { start: "08:00", end: "22:00" };
+
 export const OPTIMIZATION_STATUSES = [
   "pending",
   "running",
@@ -34,6 +37,8 @@ export const InstancePlaceSchema = z.object({
   dur: z.number().positive(),
   durMin: z.number().nonnegative(),
   delta: z.number().nonnegative(),
+  /** No hours were found, so the windows come from ASSUMED_OPEN_HOURS. */
+  hoursAssumed: z.boolean().optional(),
   /** Only available days appear: absolute minutes, already clamped to the day envelope. */
   windows: z.array(z.object({ day: z.number().int(), open: z.number(), close: z.number() })),
   /** One entry per ticket kind, cheapest variant of that kind, normalized into budget currency. */
@@ -88,6 +93,8 @@ export const ScheduleItemSchema = z.object({
   endLabel: z.string(),
   dur: z.number(),
   shortened: z.boolean(),
+  /** The visit's time rests on assumed hours rather than hours found on a page. */
+  hoursAssumed: z.boolean().optional(),
   /** s_late - s_early. Zero means a "tight" visit. */
   slack: z.number().nonnegative(),
   travelFromPrevMin: z.number().nonnegative(),

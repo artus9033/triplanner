@@ -345,7 +345,7 @@ describe.skipIf(!available)("optimizeTrip end to end", () => {
       state: makeState(MON, TUE),
       places: [
         makePlace("OTHER_DATES", { hours: hoursOn(["2027-01-01"]) }),
-        makePlace("NO_HOURS", { hours: [] }),
+        makePlace("CLOSED", { hours: [], closed_during_trip: true }),
         makePlace("OK", { hours: hoursOn([MON]) }),
       ],
     });
@@ -355,7 +355,7 @@ describe.skipIf(!available)("optimizeTrip end to end", () => {
     );
     expect(reasons).toEqual({
       OTHER_DATES: "closed_on_trip_dates",
-      NO_HOURS: "no_hours_data",
+      CLOSED: "closed_on_trip_dates",
     });
     expect(outcome.result?.items.map((i) => i.placeId)).toEqual(["OK"]);
     expect(outcome.result?.totals.total).toBe(3);
@@ -381,10 +381,40 @@ describe.skipIf(!available)("optimizeTrip end to end", () => {
   it("returns a solved empty schedule when nothing is schedulable and nothing is a must", async () => {
     const outcome = await optimizeTrip({
       state: makeState(MON, MON),
-      places: [makePlace("NO_HOURS", { hours: [] })],
+      places: [makePlace("CLOSED", { hours: [], closed_during_trip: true })],
     });
     expect(outcome.status).toBe("solved");
     expect(outcome.result?.items).toEqual([]);
+  });
+
+  it("schedules a place with no hours found, on both engines, and marks it", async () => {
+    for (const amplBin of [undefined, null]) {
+      clearOptimizerCache();
+      const outcome = await optimizeTrip(
+        {
+          state: makeState(MON, MON),
+          places: [makePlace("UNKNOWN", { hours: [] }, { must: true })],
+        },
+        amplBin === null ? { amplBin } : {},
+      );
+      expect(outcome.status).toBe(amplBin === null ? "fallback" : "solved");
+      expect(outcome.result?.dropped).toEqual([]);
+      expect(outcome.result?.items[0]).toMatchObject({
+        placeId: "UNKNOWN",
+        date: MON,
+        hoursAssumed: true,
+      });
+      // The daily window starts at 09:00 and this one place sits at the anchor.
+      expect(outcome.result?.items[0]?.startLabel).toBe("09:00");
+    }
+  });
+
+  it("does not mark a visit whose hours were found", async () => {
+    const outcome = await optimizeTrip({
+      state: makeState(MON, MON),
+      places: [makePlace("OK", { hours: hoursOn([MON]) })],
+    });
+    expect(outcome.result?.items[0]).not.toHaveProperty("hoursAssumed");
   });
 
   it("does not pick the free ticket on a Monday", async () => {

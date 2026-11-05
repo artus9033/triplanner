@@ -1,3 +1,4 @@
+import { ASSUMED_OPEN_HOURS } from "@triplanner/shared";
 import type {
   DroppedPlace,
   InstancePlace,
@@ -190,6 +191,8 @@ const buildDays = (
 };
 
 interface HoursResult {
+  /** Windows are the assumed hours, because none were found. */
+  assumed?: boolean;
   windows: { day: number; open: number; close: number }[];
   dropped: { reason: DroppedPlace["reason"]; detail: string } | null;
 }
@@ -250,10 +253,39 @@ const resolveHours = (
   }
   if (windows.length > 0) return { windows, dropped: null };
 
-  if (data.hours.length === 0) {
+  if (data.closed_during_trip) {
     return {
       windows,
-      dropped: { reason: "no_hours_data", detail: "No opening hours were found." },
+      dropped: {
+        reason: "closed_on_trip_dates",
+        detail: "The place's own pages say it is closed on your dates.",
+      },
+    };
+  }
+  // Nothing usable was found, which says nothing about when it is open: assume normal daytime hours.
+  // Hours found for only some dates are different, and there a missing date still means closed.
+  if (data.hours.length === 0 || (datedEntries > 0 && rawByDay.size === 0)) {
+    const [open, close] = [ASSUMED_OPEN_HOURS.start, ASSUMED_OPEN_HOURS.end].map(
+      (time) => parseClock(time) as number,
+    ) as [number, number];
+    const assumed = days.flatMap((info) => {
+      const midnight = MINUTES_PER_DAY * (info.day - 1);
+      const start = Math.max(midnight + open, info.dayStart);
+      const end = Math.min(midnight + close, info.dayEnd);
+      return end - start >= minDuration ? [{ day: info.day, open: start, close: end }] : [];
+    });
+    if (assumed.length > 0) {
+      warnings.push(
+        `${name}: no opening hours found; assuming ${ASSUMED_OPEN_HOURS.start}-${ASSUMED_OPEN_HOURS.end}.`,
+      );
+      return { windows: assumed, dropped: null, assumed: true };
+    }
+    return {
+      windows: [],
+      dropped: {
+        reason: "outside_daily_envelope",
+        detail: `No opening hours were found, and the daily window leaves too little of the assumed ${ASSUMED_OPEN_HOURS.start}-${ASSUMED_OPEN_HOURS.end} for a ${minDuration} min visit.`,
+      },
     };
   }
   if (datedEntries === 0) {
@@ -263,12 +295,6 @@ const resolveHours = (
         reason: "closed_on_trip_dates",
         detail: "Opening hours exist, but none on the trip's dates.",
       },
-    };
-  }
-  if (rawByDay.size === 0) {
-    return {
-      windows,
-      dropped: { reason: "no_hours_data", detail: "The opening hours found are unusable." },
     };
   }
   if (bestRaw < minDuration) {
@@ -486,6 +512,7 @@ export const buildInstance = (
       durMin,
       delta,
       windows: hours.windows,
+      ...(hours.assumed && { hoursAssumed: true }),
       tickets: resolveTickets(
         data,
         place.name,

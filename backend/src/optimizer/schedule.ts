@@ -217,6 +217,7 @@ export const assembleSchedule = (input: AssembleInput): TripSchedule => {
         endLabel: clockLabel(visit.start + visit.duration),
         dur: visit.duration,
         shortened: visit.shortened,
+        ...(visit.place.hoursAssumed && { hoursAssumed: true }),
         // Solver values carry tolerances, e.g. 3577.000001.
         slack: Math.max(0, Math.round((late - visit.start) * 1000) / 1000),
         travelFromPrevMin: visit.travelFromPrev,
