@@ -79,7 +79,7 @@ function SlackMarker({ slack, maxSlack }: { slack: number; maxSlack: number }) {
   if (slack === 0) {
     return (
       <Tooltip title="No slack: starting this visit late pushes back the rest of the day.">
-        <Chip size="small" color="secondary" variant="outlined" label="tight" />
+        <Chip size="small" color="primary" label="tight" />
       </Tooltip>
     );
   }
@@ -126,14 +126,16 @@ function Visit({
       onFocus={() => setHovered(item.placeId)}
       onBlur={() => setHovered(null)}
     >
-      <TimelineOppositeContent sx={{ pt: "1.7em", fontFamily: "var(--mono)", fontSize: "0.8rem" }}>
+      <TimelineOppositeContent
+        sx={{ pt: "1.7em", fontVariantNumeric: "tabular-nums", fontSize: "0.8rem" }}
+      >
         {item.startLabel}–{item.endLabel}
       </TimelineOppositeContent>
       <TimelineSeparator>
         <TimelineConnector
           sx={{ minHeight: "1.5em", flexGrow: 0, visibility: firstOfDay ? "hidden" : "visible" }}
         />
-        <TimelineDot color={item.slack === 0 ? "secondary" : "primary"} sx={{ my: 0.5 }} />
+        <TimelineDot color={item.slack === 0 ? "primary" : "grey"} sx={{ my: 0.5 }} />
         {!last && <TimelineConnector />}
       </TimelineSeparator>
       <TimelineContent sx={{ pb: 2, pr: 0, minWidth: 0 }}>
@@ -178,7 +180,8 @@ function Visit({
               marginTop: 8,
               padding: 12,
               border: "1px solid var(--rule)",
-              background: "var(--card)",
+              borderRadius: "var(--radius)",
+              background: "var(--surface)",
             }}
           >
             <Typography variant="h4" component="h4" gutterBottom>

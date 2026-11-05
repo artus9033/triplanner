@@ -15,8 +15,8 @@ import { PlaceDetails } from "./PlaceDetails";
 
 const STATUS_COLOR = {
   queued: "default",
-  running: "info",
-  done: "success",
+  running: "primary",
+  done: "default",
   failed: "error",
 } as const;
 

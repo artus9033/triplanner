@@ -57,7 +57,6 @@ function TripRow({ trip, current }: { trip: TripSummary; current: boolean }) {
           <Tooltip title={`Delete ${title}`}>
             <IconButton
               size="small"
-              color="inherit"
               aria-label={`Delete ${title}`}
               onClick={() => setConfirming(true)}
             >
@@ -71,7 +70,7 @@ function TripRow({ trip, current }: { trip: TripSummary; current: boolean }) {
           <Button
             size="small"
             variant="contained"
-            color="secondary"
+            color="error"
             disabled={pending}
             onClick={() => void onDelete()}
           >
@@ -109,8 +108,7 @@ export function Rail({ currentId }: { currentId?: string }) {
       </RouterLink>
       <Button
         data-testid="new-trip"
-        variant="contained"
-        color="secondary"
+        variant="outlined"
         disabled={pending}
         onClick={() => void start()}
       >
@@ -118,7 +116,7 @@ export function Rail({ currentId }: { currentId?: string }) {
       </Button>
       {error && <Alert severity="error">{error}</Alert>}
       <div>
-        <div className="eyebrow" style={{ color: "inherit", opacity: 0.7, marginBottom: 6 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>
           Your trips
         </div>
         <ul className="trip-list" data-testid="trip-list">

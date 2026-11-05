@@ -45,9 +45,9 @@ const STEPS: { step: TripStep; number: number; label: string; help: string }[] =
   },
 ];
 
-const DOT_COLOR: Record<StepState, "primary" | "secondary" | "grey"> = {
-  complete: "primary",
-  current: "secondary",
+const DOT_COLOR: Record<StepState, "primary" | "grey"> = {
+  complete: "grey",
+  current: "primary",
   upcoming: "grey",
   skipped: "grey",
 };

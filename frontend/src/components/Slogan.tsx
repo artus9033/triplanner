@@ -32,17 +32,6 @@ export function Slogan() {
           {SLOGANS[index]}
         </span>
       </h1>
-      <svg className="hero__route" viewBox="0 0 420 24" fill="none" aria-hidden="true">
-        <path
-          d="M3 18 C 70 2, 120 24, 190 12 S 330 2, 405 14"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeDasharray="2 6"
-          strokeLinecap="round"
-        />
-        <circle cx="3" cy="18" r="3" fill="currentColor" />
-        <path d="M405 6l5 8-5 8-5-8z" fill="currentColor" />
-      </svg>
     </div>
   );
 }

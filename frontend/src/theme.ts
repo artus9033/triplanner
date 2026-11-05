@@ -1,40 +1,40 @@
 import { createTheme } from "@mui/material/styles";
 
-const serif = '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
-export const mono = 'ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
+/** Dark purple is the only accent. Everything else stays neutral, and status colors are muted. */
+const PRIMARY = "#3b1d6e";
+const TEXT = "#1c1b1f";
 
 export const theme = createTheme({
   palette: {
     mode: "light",
-    primary: { main: "#14263b", contrastText: "#f5efe0" },
-    secondary: { main: "#b5432a", contrastText: "#fff8ec" },
-    success: { main: "#2f6f5e" },
-    warning: { main: "#a86f12" },
-    error: { main: "#a3301f" },
-    info: { main: "#2c6476" },
-    background: { default: "#f5efe0", paper: "#fbf7ec" },
-    text: { primary: "#14263b", secondary: "#5a6472" },
-    divider: "rgba(20, 38, 59, 0.2)",
+    primary: { main: PRIMARY, contrastText: "#ffffff" },
+    secondary: { main: "#5f5b66", contrastText: "#ffffff" },
+    success: { main: "#3f6b55" },
+    warning: { main: "#8a5a00" },
+    error: { main: "#b3261e" },
+    info: { main: "#5f5b66" },
+    background: { default: "#ffffff", paper: "#ffffff" },
+    text: { primary: TEXT, secondary: "#5f5b66" },
+    divider: "rgba(28, 27, 31, 0.12)",
   },
-  shape: { borderRadius: 2 },
+  shape: { borderRadius: 8 },
   typography: {
-    fontFamily: serif,
-    fontSize: 15,
-    h1: { fontStyle: "italic", fontWeight: 400 },
-    h2: { fontSize: "1.65rem", fontWeight: 400 },
-    h3: { fontSize: "1.2rem", fontWeight: 600 },
-    h4: { fontSize: "1.05rem", fontWeight: 600 },
-    button: { textTransform: "none", fontWeight: 600, letterSpacing: "0.01em" },
+    fontFamily: 'Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
+    h1: { fontWeight: 400 },
+    h2: { fontSize: "1.5rem", fontWeight: 400 },
+    h3: { fontSize: "1.125rem", fontWeight: 500 },
+    h4: { fontSize: "1rem", fontWeight: 500 },
+    button: { textTransform: "none", fontWeight: 500, letterSpacing: "0.01em" },
   },
   components: {
     MuiButton: { defaultProps: { disableElevation: true } },
     MuiCard: { defaultProps: { variant: "outlined" } },
+    MuiChip: { defaultProps: { variant: "outlined" } },
     MuiTooltip: {
       styleOverrides: {
-        tooltip: { backgroundColor: "#14263b", fontSize: "0.8rem", fontWeight: 400 },
-        arrow: { color: "#14263b" },
+        tooltip: { backgroundColor: TEXT, fontSize: "0.75rem", fontWeight: 400 },
+        arrow: { color: TEXT },
       },
     },
-    MuiChip: { styleOverrides: { root: { fontFamily: mono, fontSize: "0.72rem" } } },
   },
 });

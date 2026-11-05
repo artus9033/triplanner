@@ -14,7 +14,7 @@ export function Landing() {
           up a schedule you can follow on the map.
         </Typography>
         <div>
-          <Button variant="outlined" size="large" disabled={pending} onClick={() => void start()}>
+          <Button variant="contained" size="large" disabled={pending} onClick={() => void start()}>
             {pending ? "Creating..." : "Begin planning"}
           </Button>
         </div>

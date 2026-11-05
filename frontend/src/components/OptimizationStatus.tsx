@@ -143,7 +143,7 @@ export function OptimizationStatus({
       data-testid="optimization-status"
       data-status={status}
       aria-label="Schedule optimization"
-      style={{ borderLeft: "3px solid var(--vermilion)", paddingLeft: 12, margin: "12px 0" }}
+      style={{ borderLeft: "2px solid var(--primary)", paddingLeft: 12, margin: "12px 0" }}
     >
       <div className="eyebrow">Schedule optimization</div>
       <Typography role="status" sx={{ fontWeight: 600 }}>

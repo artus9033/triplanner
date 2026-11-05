@@ -204,7 +204,7 @@ export function VoiceInput({ voice, onText }: { voice: VoiceState; onText: (t: s
     <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
       {phase === "recording" ? (
         <VoiceButton label="Stop recording" problem={null} onClick={stopRecording}>
-          <StopIcon fontSize="small" color="secondary" />
+          <StopIcon fontSize="small" color="primary" />
         </VoiceButton>
       ) : (
         <VoiceButton
@@ -311,7 +311,7 @@ export function ReadAloud({ voice, text }: { voice: VoiceState; text: string }) 
             setPhase("idle");
           }}
         >
-          <GraphicEqIcon fontSize="small" color="secondary" />
+          <GraphicEqIcon fontSize="small" color="primary" />
         </VoiceButton>
       ) : (
         <VoiceButton
