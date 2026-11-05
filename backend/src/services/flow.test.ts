@@ -87,7 +87,7 @@ const fakeDeps = (): { [K in keyof AppDeps]: ReturnType<typeof vi.fn> } & AppDep
     researchPlace: vi.fn(async ({ name }: { name: string }) => ({
       data: data(name),
       sources: [{ url: "https://example.com", title: "e" }],
-      model: "claude-opus-5-5",
+      model: "callstack/Apex",
       durationMs: 5,
     })),
     runBotPool: vi.fn(async (items: unknown[], worker: (i: unknown) => Promise<void>) => {
@@ -194,14 +194,14 @@ describe("trip flow over HTTP", () => {
 
   it("does not store a failed chat turn, and shows the LLM's user message", async () => {
     deps.advanceIntake.mockRejectedValue(
-      Object.assign(new Error("secret internals"), { userMessage: "Claude is unavailable." }),
+      Object.assign(new Error("secret internals"), { userMessage: "Apex is unavailable." }),
     );
     const trip = await newTrip();
     const res = await request(app)
       .post(`/api/trips/${trip.id}/messages`)
       .send({ content: "Hi" })
       .expect(502);
-    expect(res.body.error).toBe("Claude is unavailable.");
+    expect(res.body.error).toBe("Apex is unavailable.");
     expect((await reload(trip.id)).messages).toEqual([]);
   });
 

@@ -36,3 +36,7 @@ export const enumerateDates = (start: string, end: string): string[] => {
 /** "Thursday" for 2026-11-05. Weekdays let the model map weekly opening hours to dates. */
 export const weekdayOf = (date: string): string =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+
+/** A Google Maps search link. Built from the name, so it always works and is never made up. */
+export const googleMapsSearchUrl = (name: string, city: string | null): string =>
+  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(city ? `${name}, ${city}` : name)}`;

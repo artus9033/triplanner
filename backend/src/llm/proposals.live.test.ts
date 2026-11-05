@@ -1,6 +1,6 @@
 import { emptyTripState, PlaceProposalSchema, type TripState } from "@triplanner/shared";
 import { describe, expect, it } from "vitest";
-import { anthropicApiKey } from "../config/env";
+import { apexApiKey } from "../config/env";
 import { isSamePlaceName, proposePlaces } from "./proposals";
 
 const state: TripState = {
@@ -14,22 +14,18 @@ const state: TripState = {
   budget_answered: true,
 };
 
-describe.skipIf(!anthropicApiKey())("proposePlaces (live)", () => {
-  it(
-    "proposes real options with one safe link and backend sources",
-    { timeout: 120_000 },
-    async () => {
-      const startedAt = Date.now();
-      const proposals = await proposePlaces({ state, messages: [], maxUses: 2 });
-      console.info(`[live] proposals n=${proposals.length} ms=${Date.now() - startedAt}`);
-      expect(proposals.length).toBeGreaterThan(0);
-      for (const proposal of proposals) {
-        expect(PlaceProposalSchema.safeParse(proposal).success).toBe(true);
-        expect(isSamePlaceName(proposal.name, "Louvre")).toBe(false);
-        expect(proposal.sources.length).toBeGreaterThan(0);
-        if (proposal.link) expect(proposal.link).toMatch(/^https?:\/\//);
-        expect(proposal.link === null).toBe(proposal.link_kind === null);
-      }
-    },
-  );
+describe.skipIf(!apexApiKey())("proposePlaces (live)", () => {
+  it("proposes valid options with one safe link", { timeout: 120_000 }, async () => {
+    const startedAt = Date.now();
+    const proposals = await proposePlaces({ state, messages: [], maxFetches: 1 });
+    console.info(
+      `[live] proposals ms=${Date.now() - startedAt} ${proposals.map((p) => p.name).join(" | ")}`,
+    );
+    expect(proposals.length).toBeGreaterThan(0);
+    for (const proposal of proposals) {
+      expect(PlaceProposalSchema.safeParse(proposal).success).toBe(true);
+      expect(isSamePlaceName(proposal.name, "Louvre")).toBe(false);
+      expect(proposal.link).toMatch(/^https:\/\/www\.google\.com\/maps\/search\//);
+    }
+  });
 });

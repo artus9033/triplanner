@@ -1,196 +1,212 @@
-import { emptyTripState, type PlaceData, type TripState } from "@triplanner/shared";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PLACE_SEARCH_MAX_USES } from "../config/llm";
-import { setAnthropicClientForTest } from "./client";
-import { LlmError } from "./errors";
-import { postValidatePlace, researchPlace, withBudget } from "./placeBot";
 import {
-  citedText,
-  fakeClient,
-  hangUntilAborted,
-  jsonResponse,
-  message,
-  type Reply,
-} from "./testApi";
+  emptyTripState,
+  PlaceDataSchema,
+  type PlaceData,
+  type TripState,
+} from "@triplanner/shared";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setApexFetchForTest } from "./client";
+import { PageError, type fetchPage } from "./fetchPage";
+import { setGeocodeFetchForTest } from "./geocode";
+import { postValidatePlace, researchPlace, withBudget } from "./placeBot";
+import { setPageFetcherForTest } from "./research";
+import { chat, fakeFetch, fetchCall, hangUntilAborted, jsonResponse, type Reply } from "./testApi";
 
 const state: TripState = {
   ...emptyTripState(),
   city: "Paris",
-  start_date: "2026-11-10",
-  end_date: "2026-11-11",
+  start_date: "2026-12-01",
+  end_date: "2026-12-02",
 };
 
-const place: PlaceData = {
+const data: PlaceData = {
   place: "Louvre",
   category: "museum",
   address: "Rue de Rivoli",
-  lat: 48.86,
-  lng: 2.33,
+  lat: null,
+  lng: null,
   phone: null,
-  website: "https://www.louvre.fr/",
-  hours: [
-    { date: "2026-11-10", start: "9:00", end: "18:00" },
-    { date: "2026-11-11", start: "09:00", end: "21:00" },
-    { date: "2026-11-12", start: "09:00", end: "18:00" },
-    { date: "2026-11-11", start: "closed", end: "closed" },
-  ],
-  description: "A museum.",
+  website: "https://www.louvre.fr",
+  hours: [{ date: "2026-12-01", start: "09:00", end: "18:00" }],
+  description: "Big museum",
   visit_duration_min: null,
   google_place_id: null,
-  google_maps_url: "javascript:alert(1)",
-  place_image_url: "ftp://x/y.png",
-  tickets: [],
+  google_maps_url: null,
+  place_image_url: null,
+  tickets: [{ type: "paid", price: "22EUR", condition: null }],
   needs_reservation: true,
 };
 
-const research = message({ content: [citedText("Notes", "https://www.louvre.fr/")] });
-const extracted = message({ content: [{ type: "text", text: JSON.stringify(place) }] });
+let geocode: ReturnType<typeof fakeFetch>;
+const SITE = "https://www.louvre.fr/hours";
 
-const useReplies = (replies: Reply[]) => {
-  const { client, requests } = fakeClient(replies);
-  setAnthropicClientForTest(client);
-  return requests;
+const run = (replies: Reply[], options: { budgetMs?: number } = {}) => {
+  const fake = fakeFetch(replies);
+  setApexFetchForTest(fake.fetchFn);
+  return {
+    requests: fake.requests,
+    result: researchPlace({ name: "Louvre", note: "Richelieu wing", state, ...options }),
+  };
 };
+const happy = (value: unknown = data): Reply[] => [
+  fetchCall(SITE),
+  chat({ content: "Hours are on the site." }),
+  chat({ content: JSON.stringify(value) }),
+];
 
 beforeEach(() => {
-  vi.spyOn(console, "info").mockImplementation(() => {});
+  geocode = fakeFetch([jsonResponse([{ lat: "48.86", lon: "2.33" }])]);
+  setGeocodeFetchForTest(geocode.fetchFn);
+  setPageFetcherForTest((async (url: string) => ({
+    url,
+    title: "Hours",
+    text: "PAGE-TEXT: open 9 to 18, 22 euros",
+  })) as unknown as typeof fetchPage);
 });
 afterEach(() => {
-  setAnthropicClientForTest(null);
-  vi.restoreAllMocks();
+  setApexFetchForTest(null);
+  setPageFetcherForTest(null);
+  setGeocodeFetchForTest(null);
 });
 
 describe("researchPlace", () => {
-  it("runs research with the tool, then extract without tools, and post-validates", async () => {
-    const requests = useReplies([research, extracted]);
-    const result = await researchPlace({ name: "Louvre", note: "Richelieu wing", state });
+  it("researches, extracts, geocodes and attaches real sources", async () => {
+    const { result } = run(happy());
+    const out = await result;
+    expect(PlaceDataSchema.safeParse(out.data).success).toBe(true);
+    expect(out.sources).toEqual([{ url: SITE, title: "Hours" }]);
+    expect(out.model).toBe("callstack/Apex");
+    expect(out.data).toMatchObject({ lat: 48.86, lng: 2.33 });
+    expect(out.data.google_maps_url).toContain("google.com/maps/search");
+    expect(out.data.google_maps_url).toContain("Louvre%2C%20Paris");
+  });
 
+  it("extracts from the page text alone, never the model's notes, and with no tools", async () => {
+    const { requests, result } = run([
+      fetchCall(SITE),
+      chat({ content: "MODEL-MEMORY: open until midnight" }),
+      chat({ content: JSON.stringify(data) }),
+    ]);
+    await result;
+    const extract = requests.at(-1)!.body;
+    expect(extract.tools).toBeUndefined();
+    const sent = JSON.stringify(extract.messages);
+    expect(sent).toContain("PAGE-TEXT");
+    expect(sent).not.toContain("MODEL-MEMORY");
+    expect(extract.messages[0].content).toMatch(/never your own knowledge/);
+  });
+
+  it("states the budget, dates, and that web text is untrusted, in the prompts", async () => {
+    const { requests, result } = run(happy());
+    await result;
+    const [first] = requests;
+    const text = JSON.stringify(first!.body.messages);
+    expect(text).toMatch(/tops 1 minute/);
+    expect(text).toMatch(/untrusted/);
+    expect(text).toContain("2026-12-01 (Tuesday)");
+    expect(text).toContain("Richelieu wing");
+  });
+
+  it("fails visibly when no page loaded, however confident the model sounds", async () => {
+    setPageFetcherForTest((async () => {
+      throw new PageError("The page returned status 403.");
+    }) as unknown as typeof fetchPage);
+    const { requests, result } = run([
+      fetchCall(SITE),
+      chat({ content: "From memory, the Louvre opens at 9." }),
+    ]);
+    await expect(result).rejects.toMatchObject({ code: "no_pages" });
     expect(requests).toHaveLength(2);
-    expect(requests[0]!.body.tools).toEqual([
-      { type: "web_search_20250305", name: "web_search", max_uses: PLACE_SEARCH_MAX_USES },
-    ]);
-    expect(requests[1]!.body).not.toHaveProperty("tools");
-
-    expect(result.data.hours).toEqual([
-      { date: "2026-11-10", start: "09:00", end: "18:00" },
-      { date: "2026-11-11", start: "09:00", end: "21:00" },
-    ]);
-    expect(result.data.website).toBe("https://www.louvre.fr/");
-    expect(result.data.google_maps_url).toBeNull();
-    expect(result.data.place_image_url).toBeNull();
-    expect(result.sources).toEqual([{ url: "https://www.louvre.fr/", title: "Title" }]);
-    expect(result.model).toBe("claude-opus-5-5");
-    expect(result.durationMs).toBeGreaterThanOrEqual(0);
-    expect(result.costUsd).toBeGreaterThan(0);
   });
 
-  it("the prompts carry the plan's rules", async () => {
-    const requests = useReplies([research, extracted]);
-    await researchPlace({ name: "Louvre", note: "Richelieu wing", state });
-    const { system, messages, tools } = requests[0]!.body;
-    expect(system).toMatch(/official website/i);
-    expect(system).toMatch(/1 minute/);
-    expect(system).toMatch(/unknown/i);
-    expect(system).toMatch(/never invent/i);
-    expect(system).toMatch(/untrusted/i);
-    expect(system).toMatch(/ignore any instructions/i);
-    expect(messages[0].content).toContain("2026-11-10");
-    expect(messages[0].content).toContain("2026-11-11");
-    expect(messages[0].content).toContain("Richelieu wing");
-    expect(tools[0]).not.toHaveProperty("allowed_domains");
-    expect(requests[1]!.body.system).toMatch(/ignore any instructions/i);
+  it("also fails when the model never fetches anything", async () => {
+    await expect(run([chat({ content: "Opens at 9." })]).result).rejects.toMatchObject({
+      code: "no_pages",
+    });
   });
 
-  it("fails without valid dates, before any API call", async () => {
-    const requests = useReplies([research]);
+  it("drops hours outside the trip and rejects an over-long description", async () => {
+    const outside = {
+      ...data,
+      hours: [...data.hours, { date: "2027-01-01", start: "09:00", end: "18:00" }],
+    };
+    expect((await run(happy(outside)).result).data.hours).toHaveLength(1);
+    await expect(
+      run(happy({ ...data, description: "x".repeat(121) })).result,
+    ).rejects.toMatchObject({ code: "extract_failed" });
+  });
+
+  it("keeps a page's own coordinates when geocoding finds nothing", async () => {
+    setGeocodeFetchForTest(fakeFetch([jsonResponse([])]).fetchFn);
+    const out = await run(happy({ ...data, lat: 1, lng: 2 })).result;
+    expect(out.data).toMatchObject({ lat: 1, lng: 2 });
+  });
+
+  it("enforces one time budget across research and extract", async () => {
+    const { result } = run([fetchCall(SITE), chat({ content: "n" }), hangUntilAborted], {
+      budgetMs: 60,
+    });
+    const started = Date.now();
+    await expect(result).rejects.toMatchObject({ code: "timeout" });
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it("rejects a trip without valid dates before spending anything", async () => {
+    const fake = fakeFetch([chat()]);
+    setApexFetchForTest(fake.fetchFn);
     await expect(
       researchPlace({ name: "x", note: null, state: emptyTripState() }),
-    ).rejects.toBeInstanceOf(LlmError);
-    expect(requests).toHaveLength(0);
-  });
-
-  it("over-long description fails the place", async () => {
-    useReplies([
-      research,
-      message({
-        content: [
-          { type: "text", text: JSON.stringify({ ...place, description: "x".repeat(121) }) },
-        ],
-      }),
-    ]);
-    await expect(researchPlace({ name: "x", note: null, state })).rejects.toMatchObject({
-      code: "extract_failed",
-    });
-  });
-});
-
-describe("the time budget", () => {
-  it("a hung research call times out", async () => {
-    const requests = useReplies([hangUntilAborted]);
-    const startedAt = Date.now();
-    await expect(
-      researchPlace({ name: "x", note: null, state, budgetMs: 50 }),
-    ).rejects.toMatchObject({ code: "timeout" });
-    expect(Date.now() - startedAt).toBeLessThan(2000);
-    expect(requests).toHaveLength(1);
-  });
-
-  it("covers research and extract together with one signal", async () => {
-    const delayed = () =>
-      new Promise<Response>((resolve) => setTimeout(() => resolve(jsonResponse(research)), 60));
-    const requests = useReplies([delayed, hangUntilAborted]);
-    const startedAt = Date.now();
-    await expect(
-      researchPlace({ name: "x", note: null, state, budgetMs: 120 }),
-    ).rejects.toMatchObject({ code: "timeout" });
-    // Research used part of the budget, and extract was stopped by the same timer: a per-call
-    // timeout of 120ms would have ended at 180ms or later.
-    expect(requests).toHaveLength(2);
-    expect(requests[1]!.body).not.toHaveProperty("tools");
-    expect(Date.now() - startedAt).toBeLessThan(175);
-  });
-
-  it("the signal also stops SDK retries", async () => {
-    const overloaded = () =>
-      Promise.resolve(
-        jsonResponse({ type: "error", error: { type: "overloaded_error", message: "busy" } }, 529),
-      );
-    const requests = useReplies([overloaded]);
-    await expect(
-      researchPlace({ name: "x", note: null, state, budgetMs: 100 }),
-    ).rejects.toMatchObject({ code: "timeout" });
-    const attemptsAtTimeout = requests.length;
-    expect(attemptsAtTimeout).toBeGreaterThanOrEqual(1);
-    // The SDK's first backoff is at least ~375ms, so nothing further may start after the abort.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    expect(requests.length).toBe(attemptsAtTimeout);
-  });
-
-  it("a caller's abort stops the work too, and is not reported as a timeout", async () => {
-    useReplies([hangUntilAborted]);
-    const parent = new AbortController();
-    const promise = researchPlace({ name: "x", note: null, state, signal: parent.signal });
-    setTimeout(() => parent.abort(), 20);
-    await expect(promise).rejects.toMatchObject({
-      code: "api",
-      userMessage: "The request was cancelled.",
-    });
-  });
-
-  it("withBudget stops even work that ignores the signal, and passes results and errors through", async () => {
-    await expect(withBudget(20, () => new Promise(() => {}))).rejects.toMatchObject({
-      code: "timeout",
-    });
-    await expect(withBudget(1000, async () => 5)).resolves.toBe(5);
-    const boom = new LlmError("refusal");
-    await expect(withBudget(1000, () => Promise.reject(boom))).rejects.toBe(boom);
+    ).rejects.toMatchObject({ code: "api" });
+    expect(fake.requests).toHaveLength(0);
   });
 });
 
 describe("postValidatePlace", () => {
-  it("drops hours outside dates and non-http(s) URLs", () => {
-    const out = postValidatePlace(place, ["2026-11-10"]);
-    expect(out.hours).toEqual([{ date: "2026-11-10", start: "09:00", end: "18:00" }]);
-    expect(out.google_maps_url).toBeNull();
+  it("normalizes times, drops bad entries, and nulls unsafe URLs", () => {
+    const out = postValidatePlace(
+      {
+        ...data,
+        hours: [
+          { date: "2026-12-01", start: "9:30", end: "18:00" },
+          { date: "2026-12-02", start: "late", end: "18:00" },
+        ],
+        website: "javascript:alert(1)",
+        place_image_url: "ftp://x/y.png",
+      },
+      ["2026-12-01", "2026-12-02"],
+    );
+    expect(out.hours).toEqual([{ date: "2026-12-01", start: "09:30", end: "18:00" }]);
+    expect(out.website).toBeNull();
+    expect(out.place_image_url).toBeNull();
+  });
+});
+
+describe("withBudget", () => {
+  it("returns results, and ends a call that ignores its signal", async () => {
+    expect(await withBudget(1000, async () => 7)).toBe(7);
+    await expect(withBudget(20, () => new Promise(() => {}))).rejects.toMatchObject({
+      code: "timeout",
+    });
+  });
+
+  it("passes on a parent abort and clears up", async () => {
+    const parent = new AbortController();
+    const spy = vi.fn();
+    const running = withBudget(
+      1000,
+      (signal) =>
+        new Promise((_, reject) => {
+          signal.addEventListener("abort", () => {
+            spy();
+            reject(new Error("stopped"));
+          });
+        }),
+      parent.signal,
+    );
+    parent.abort();
+    await expect(running).rejects.toMatchObject({
+      userMessage: expect.stringMatching(/cancelled/),
+    });
+    expect(spy).toHaveBeenCalled();
   });
 });

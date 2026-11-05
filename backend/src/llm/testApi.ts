@@ -1,11 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
-
-/** Test helper: a real SDK client whose fetch serves canned replies and records the wire request. */
-export type CapturedRequest = {
-  url: string;
-  headers: Headers;
-  body: any;
-};
+/** Test helper: the real AI SDK against a fetch that serves canned replies and records requests. */
+export type CapturedRequest = { url: string; headers: Headers; body: any };
 
 export const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
@@ -13,17 +7,39 @@ export const jsonResponse = (body: unknown, status = 200): Response =>
     headers: { "content-type": "application/json" },
   });
 
-export const message = (overrides: Record<string, unknown> = {}) => ({
-  id: "msg_test",
-  type: "message",
-  role: "assistant",
-  model: "claude-opus-5-5",
-  content: [{ type: "text", text: "ok", citations: null }],
-  stop_reason: "end_turn",
-  stop_sequence: null,
-  usage: { input_tokens: 10, output_tokens: 5, server_tool_use: { web_search_requests: 0 } },
-  ...overrides,
+type ToolCall = { id?: string; name: string; args: unknown };
+
+export const chat = ({
+  content = "ok",
+  toolCalls,
+  finish,
+}: { content?: string | null; toolCalls?: ToolCall[]; finish?: string } = {}) => ({
+  id: "chatcmpl-test",
+  object: "chat.completion",
+  created: 1,
+  model: "callstack/Apex",
+  choices: [
+    {
+      index: 0,
+      finish_reason: finish ?? (toolCalls ? "tool_calls" : "stop"),
+      message: {
+        role: "assistant",
+        content,
+        ...(toolCalls && {
+          tool_calls: toolCalls.map((call, i) => ({
+            id: call.id ?? `call_${i}`,
+            type: "function",
+            function: { name: call.name, arguments: JSON.stringify(call.args) },
+          })),
+        }),
+      },
+    },
+  ],
+  usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
 });
+
+export const fetchCall = (url: string, id?: string) =>
+  chat({ content: null, toolCalls: [{ id, name: "fetch_page", args: { url } }] });
 
 export type Reply =
   Response | Record<string, unknown> | ((signal: AbortSignal) => Promise<Response>);
@@ -45,26 +61,8 @@ export const fakeFetch = (replies: Reply[]) => {
   return { fetchFn, requests };
 };
 
-export const fakeClient = (replies: Reply[]) => {
-  const { fetchFn, requests } = fakeFetch(replies);
-  return { client: new Anthropic({ apiKey: "test-key", fetch: fetchFn }), requests };
-};
-
 /** A reply that only settles when the request's abort signal fires. */
 export const hangUntilAborted = (signal: AbortSignal): Promise<Response> =>
   new Promise((_, reject) => {
     signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
   });
-
-export const searchBlocks = (id: string, content: unknown) => [
-  { type: "server_tool_use", id, name: "web_search", input: { query: "q" } },
-  { type: "web_search_tool_result", tool_use_id: id, content },
-];
-
-export const citedText = (text: string, url: string, title: string | null = "Title") => ({
-  type: "text",
-  text,
-  citations: [
-    { type: "web_search_result_location", url, title, cited_text: "c", encrypted_index: "e" },
-  ],
-});

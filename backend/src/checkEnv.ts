@@ -2,7 +2,7 @@
  * The checks that need backend code. Run by scripts/lib/status.ts, which merges these rows into its
  * table. The rows go to stdout as one marked line. Details never contain a secret's value.
  */
-import { anthropicApiKey } from "./config/env";
+import { apexApiKey } from "./config/env";
 import { speechModelsCached } from "./speech";
 
 type Row = {
@@ -15,9 +15,9 @@ type Row = {
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 const llmRow = async (): Promise<Row> => {
-  const base = { feature: "Claude API key", required: true };
-  if (!anthropicApiKey()) {
-    return { ...base, status: "missing", detail: "ANTHROPIC_API_KEY is not set in .env" };
+  const base = { feature: "Apex API key", required: true };
+  if (!apexApiKey()) {
+    return { ...base, status: "missing", detail: "APEX_API_KEY is not set in .env" };
   }
   try {
     const { checkLlmKey } = await import("./llm/client");

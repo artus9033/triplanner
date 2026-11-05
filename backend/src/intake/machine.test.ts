@@ -1,14 +1,15 @@
 import { emptyTripState, type TripState } from "@triplanner/shared";
 import { afterEach, describe, expect, it } from "vitest";
-import { CLAUDE_MODEL, INTAKE_EFFORT } from "../config/llm";
-import { fakeFetch, jsonResponse, message } from "../llm/testApi";
+import { APEX_MODEL, INTAKE_EFFORT } from "../config/llm";
+import { setApexFetchForTest } from "../llm/client";
+import { chat, fakeFetch, jsonResponse } from "../llm/testApi";
 import {
   advanceIntake,
   applyIntakeUpdate,
   intakePhase,
   missingFields,
   nextQuestion,
-  setIntakeFetchForTest,
+  statementsOnly,
   type IntakeUpdate,
 } from "./machine";
 
@@ -41,7 +42,7 @@ const filled: TripState = {
 const apply = (update: Partial<IntakeUpdate>, state: TripState = emptyTripState()) =>
   applyIntakeUpdate(state, { ...blankUpdate, ...update }, today);
 
-afterEach(() => setIntakeFetchForTest(null));
+afterEach(() => setApexFetchForTest(null));
 
 describe("phases", () => {
   it("walks dates, city, plans, budget, complete", () => {
@@ -152,19 +153,16 @@ describe("applyIntakeUpdate", () => {
   });
 });
 
-const reply = (update: Partial<IntakeUpdate>, overrides: Record<string, unknown> = {}) =>
-  message({
-    content: [{ type: "text", text: JSON.stringify({ ...blankUpdate, ...update }) }],
-    ...overrides,
-  });
+const reply = (update: Partial<IntakeUpdate>) =>
+  chat({ content: JSON.stringify({ ...blankUpdate, ...update }) });
 
 const turn = (state: TripState = emptyTripState(), userMessage = "hi") =>
   advanceIntake({ state, messages: [], userMessage, today });
 
-describe("advanceIntake over LangChain", () => {
+describe("advanceIntake over the AI SDK", () => {
   it("wire request: effort, json schema format, no tools or forbidden params", async () => {
     const { fetchFn, requests } = fakeFetch([reply({})]);
-    setIntakeFetchForTest(fetchFn);
+    setApexFetchForTest(fetchFn);
     await advanceIntake({
       state: emptyTripState(),
       messages: [
@@ -174,39 +172,61 @@ describe("advanceIntake over LangChain", () => {
       userMessage: "soon",
       today,
     });
-    const { body, url, headers } = requests[0]!;
-    expect(url).toContain("/v1/messages");
-    expect(body.model).toBe(CLAUDE_MODEL);
-    expect(body.output_config.effort).toBe(INTAKE_EFFORT);
-    expect(body.output_config.format.type).toBe("json_schema");
-    for (const key of ["temperature", "top_p", "top_k", "thinking", "tool_choice", "tools"]) {
+    const { body, url } = requests[0]!;
+    expect(url).toBe("https://api.callstack.ai/v1/chat/completions");
+    expect(body.model).toBe(APEX_MODEL);
+    expect(body.reasoning_effort).toBe(INTAKE_EFFORT);
+    expect(body.response_format.type).toBe("json_schema");
+    for (const key of ["temperature", "top_p", "top_k", "tool_choice", "tools"]) {
       expect(body).not.toHaveProperty(key);
     }
-    expect(headers.get("anthropic-beta")).toBeNull();
     expect(body.messages.map((m: { role: string }) => m.role)).toEqual([
+      "system",
       "user",
       "assistant",
       "user",
     ]);
     expect(body.messages.at(-1).content).toBe("soon");
-    expect(body.system).toContain(today);
+    expect(body.messages[0].content).toContain(today);
   });
 
   it("does not repeat the message when the route already stored it", async () => {
     const { fetchFn, requests } = fakeFetch([reply({})]);
-    setIntakeFetchForTest(fetchFn);
+    setApexFetchForTest(fetchFn);
     await advanceIntake({
       state: emptyTripState(),
       messages: [{ id: "1", role: "user", content: "soon", createdAt: "" }],
       userMessage: "soon",
       today,
     });
-    expect(requests[0]!.body.messages).toHaveLength(1);
+    expect(requests[0]!.body.messages).toHaveLength(2);
+  });
+
+  it("counts named places as plans when the model leaves plans empty", async () => {
+    const { fetchFn } = fakeFetch([
+      reply({ named_places: [{ name: "the Louvre", note: null }], plans: null }),
+    ]);
+    setApexFetchForTest(fetchFn);
+    const result = await turn({ ...filled, plans: null, named_places: [], budget_answered: false });
+    expect(result.state.plans).toBe("the Louvre");
+    expect(result.reply).not.toMatch(/What would you like to do/);
+    expect(result.reply).toMatch(/budget/i);
+  });
+
+  it("removes questions the model added, so only code asks", async () => {
+    const { fetchFn } = fakeFetch([
+      reply({ city: "Paris", acknowledgement: "Got it. Anything else?" }),
+    ]);
+    setApexFetchForTest(fetchFn);
+    const result = await turn();
+    expect(result.reply).toMatch(/^Got it\. When do you want to travel/);
+    expect(statementsOnly("Is it far?")).toBe("");
+    expect(statementsOnly("Lovely! Noted.")).toBe("Lovely! Noted.");
   });
 
   it("code decides the reply and completion", async () => {
     const { fetchFn } = fakeFetch([reply({ city: "Paris", acknowledgement: "Lovely." })]);
-    setIntakeFetchForTest(fetchFn);
+    setApexFetchForTest(fetchFn);
     const result = await turn();
     expect(result.complete).toBe(false);
     expect(result.reply).toMatch(/^Lovely\. /);
@@ -225,7 +245,7 @@ describe("advanceIntake over LangChain", () => {
         budget_answered: true,
       }),
     ]);
-    setIntakeFetchForTest(fetchFn);
+    setApexFetchForTest(fetchFn);
     const result = await turn();
     expect(result.complete).toBe(false);
     expect(result.reply).toMatch(/in the past/);
@@ -234,7 +254,7 @@ describe("advanceIntake over LangChain", () => {
 
   it("completes when code sees everything", async () => {
     const { fetchFn } = fakeFetch([reply({ budget_answered: true, budget_amount: null })]);
-    setIntakeFetchForTest(fetchFn);
+    setApexFetchForTest(fetchFn);
     const result = await turn({ ...filled, budget_answered: false });
     expect(result.complete).toBe(true);
     expect(result.reply).toMatch(/no budget limit/);
@@ -242,23 +262,15 @@ describe("advanceIntake over LangChain", () => {
 
   it("maps refusal, cut-off, bad output and API errors", async () => {
     const cases: [unknown, string][] = [
-      [message({ stop_reason: "refusal", content: [{ type: "text", text: "no" }] }), "refusal"],
-      [
-        message({ stop_reason: "max_tokens", content: [{ type: "text", text: '{"acknow' }] }),
-        "max_tokens",
-      ],
-      [message({ content: [{ type: "text", text: "not json" }] }), "extract_failed"],
-      [
-        jsonResponse(
-          { type: "error", error: { type: "invalid_request_error", message: "bad" } },
-          400,
-        ),
-        "api",
-      ],
+      [chat({ finish: "content_filter", content: "no" }), "refusal"],
+      [chat({ finish: "length", content: '{"acknow' }), "max_tokens"],
+      [chat({ content: "not json" }), "extract_failed"],
+      [chat({ content: '{"acknowledgement":5}' }), "extract_failed"],
+      [jsonResponse({ error: { message: "bad" } }, 400), "api"],
     ];
     for (const [fakeReply, code] of cases) {
       const { fetchFn } = fakeFetch([fakeReply as Response]);
-      setIntakeFetchForTest(fetchFn);
+      setApexFetchForTest(fetchFn);
       await expect(turn()).rejects.toMatchObject({ code });
     }
   });

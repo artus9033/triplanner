@@ -1,165 +1,100 @@
-import { PlaceDataSchema, type PlaceData } from "@triplanner/shared";
 import { afterEach, describe, expect, it } from "vitest";
+import { PlaceDataSchema } from "@triplanner/shared";
 import { z } from "zod";
 import { SEARCH_EFFORT } from "../config/llm";
-import { setAnthropicClientForTest } from "./client";
-import { LlmError } from "./errors";
+import { setApexFetchForTest } from "./client";
 import { extractStructured, normalizeEnums } from "./extract";
-import { fakeClient, message, type Reply } from "./testApi";
+import { chat, fakeFetch, jsonResponse, type Reply } from "./testApi";
 
-const validPlace: PlaceData = {
-  place: "Louvre",
-  category: "museum",
-  address: null,
-  lat: 48.86,
-  lng: 2.33,
-  phone: null,
-  website: null,
-  hours: [],
-  description: "A museum.",
-  visit_duration_min: null,
-  google_place_id: null,
-  google_maps_url: null,
-  place_image_url: null,
-  tickets: [{ type: "paid", price: "22EUR", condition: null }],
-  needs_reservation: null,
-};
-
-const text = (value: unknown) => ({
-  content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],
+const Schema = z.object({
+  city: z.string(),
+  kind: z.enum(["museum", "other"]),
+  note: z.string().max(10).nullable(),
 });
+const good = { city: "Paris", kind: "museum", note: null };
 
-const run = <S extends z.ZodType>(schema: S, replies: Reply[]) => {
-  const { client, requests } = fakeClient(replies);
-  setAnthropicClientForTest(client);
-  return { promise: extractStructured(schema, { system: "sys", text: "notes" }), requests };
+const run = (replies: Reply[]) => {
+  const fake = fakeFetch(replies);
+  setApexFetchForTest(fake.fetchFn);
+  return {
+    requests: fake.requests,
+    result: extractStructured(Schema, { system: "sys", text: "notes" }),
+  };
 };
+const json = (value: unknown) => chat({ content: `\n\n${JSON.stringify(value)}` });
 
-const codeOf = (promise: Promise<unknown>) =>
-  promise.then(
-    () => "no error",
-    (e: LlmError) => e.code,
-  );
+afterEach(() => setApexFetchForTest(null));
 
-afterEach(() => setAnthropicClientForTest(null));
-
-describe("extractStructured request", () => {
-  it("sends no tools, no forbidden params, and the effort and format", async () => {
-    const { promise, requests } = run(PlaceDataSchema, [message(text(validPlace))]);
-    await promise;
+describe("extractStructured", () => {
+  it("sends a JSON schema, effort, and no tools", async () => {
+    const { requests, result } = run([json(good)]);
+    expect(await result).toEqual(good);
     const { body } = requests[0]!;
-    for (const key of [
-      "tools",
-      "tool_choice",
-      "temperature",
-      "top_p",
-      "top_k",
-      "thinking",
-      "fallbacks",
+    expect(body.response_format.type).toBe("json_schema");
+    expect(body.response_format.json_schema.schema.properties.kind.enum).toEqual([
+      "museum",
+      "other",
+    ]);
+    expect(body.reasoning_effort).toBe(SEARCH_EFFORT);
+    expect(body.tools).toBeUndefined();
+  });
+
+  it("compares enums without regard to case", async () => {
+    expect(await run([json({ ...good, kind: "MUSEUM" })]).result).toMatchObject({ kind: "museum" });
+  });
+
+  it("fails on an unknown enum, a broken limit, a wrong type, or text that is not JSON", async () => {
+    for (const reply of [
+      json({ ...good, kind: "park" }),
+      json({ ...good, note: "x".repeat(11) }),
+      json({ ...good, city: 5 }),
+      chat({ content: "Sorry, no." }),
     ]) {
-      expect(body).not.toHaveProperty(key);
+      await expect(run([reply]).result).rejects.toMatchObject({ code: "extract_failed" });
     }
-    expect(body.output_config.effort).toBe(SEARCH_EFFORT);
-    expect(body.output_config.format.type).toBe("json_schema");
   });
 
-  it("SDK 1.5.0 strips length and range limits from the wire schema into the description", async () => {
-    const { promise, requests } = run(PlaceDataSchema, [message(text(validPlace))]);
-    await promise;
-    const wire = requests[0]!.body.output_config.format.schema;
-    const wireText = JSON.stringify(wire);
-    expect(wireText).not.toMatch(/"(maxLength|minimum|maximum|exclusiveMinimum)"/);
-    expect(wire.additionalProperties).toBe(false);
-    const description = wire.properties.description.anyOf[0];
-    expect(description.type).toBe("string");
-    expect(description.description).toContain("maxLength: 120");
-    const lat = wire.properties.lat.anyOf[0];
-    expect(lat.description).toMatch(/minimum: -90.*maximum: 90/);
-    // `enum` is treated the same way, which is why enums are compared in code.
-    expect(wire.properties.category.enum).toBeUndefined();
-    expect(wire.properties.category.description).toContain("enum:");
-  });
-});
-
-describe("extractStructured results", () => {
-  it("returns validated output", async () => {
-    await expect(run(PlaceDataSchema, [message(text(validPlace))]).promise).resolves.toEqual(
-      validPlace,
-    );
-  });
-
-  it("a description over 120 characters is a failed extraction, not truncated", async () => {
-    const reply = message(text({ ...validPlace, description: "x".repeat(121) }));
-    await expect(codeOf(run(PlaceDataSchema, [reply]).promise)).resolves.toBe("extract_failed");
-  });
-
-  it("accepts exactly 120 characters", async () => {
-    const description = "x".repeat(120);
-    const reply = message(text({ ...validPlace, description }));
-    await expect(run(PlaceDataSchema, [reply]).promise).resolves.toMatchObject({ description });
-  });
-
-  it("a latitude out of range is a failed extraction", async () => {
-    const reply = message(text({ ...validPlace, lat: 91 }));
-    await expect(codeOf(run(PlaceDataSchema, [reply]).promise)).resolves.toBe("extract_failed");
-  });
-
-  it("invalid JSON is a failed extraction", async () => {
-    await expect(codeOf(run(PlaceDataSchema, [message(text("{not json"))]).promise)).resolves.toBe(
-      "extract_failed",
-    );
-  });
-
-  it("no text block means null parsed_output, a failed extraction", async () => {
-    await expect(codeOf(run(PlaceDataSchema, [message({ content: [] })]).promise)).resolves.toBe(
-      "extract_failed",
-    );
-  });
-
-  it("compares enums case-insensitively", async () => {
-    const reply = message(
-      text({
-        ...validPlace,
-        category: "MUSEUM",
-        tickets: [{ type: "Paid", price: "1USD", condition: null }],
-      }),
-    );
-    await expect(run(PlaceDataSchema, [reply]).promise).resolves.toMatchObject({
-      category: "museum",
-      tickets: [{ type: "paid" }],
+  it("checks stop reasons before parsing", async () => {
+    await expect(
+      run([chat({ finish: "content_filter", content: "no" })]).result,
+    ).rejects.toMatchObject({ code: "refusal" });
+    await expect(run([chat({ finish: "length", content: '{"ci' })]).result).rejects.toMatchObject({
+      code: "max_tokens",
     });
   });
 
-  it("an enum value outside the set is still a failed extraction", async () => {
-    const reply = message(text({ ...validPlace, category: "park" }));
-    await expect(codeOf(run(PlaceDataSchema, [reply]).promise)).resolves.toBe("extract_failed");
+  it("reports usage and maps API errors", async () => {
+    const seen: unknown[] = [];
+    setApexFetchForTest(fakeFetch([json(good)]).fetchFn);
+    await extractStructured(Schema, {
+      system: "s",
+      text: "t",
+      onUsage: (usage) => seen.push(usage),
+    });
+    expect(seen).toEqual([{ input_tokens: 10, output_tokens: 5, pages_fetched: 0 }]);
+    await expect(
+      run([jsonResponse({ error: { message: "x" } }, 400)]).result,
+    ).rejects.toMatchObject({ code: "api" });
   });
 
-  it("stop_reason wins over parsing: refusal text that is not JSON is a refusal", async () => {
-    const reply = message({ ...text("I can't help with that."), stop_reason: "refusal" });
-    await expect(codeOf(run(PlaceDataSchema, [reply]).promise)).resolves.toBe("refusal");
-  });
-
-  it("stop_reason wins over parsing: truncated JSON is max_tokens", async () => {
-    const reply = message({ ...text('{"place": "Lou'), stop_reason: "max_tokens" });
-    await expect(codeOf(run(PlaceDataSchema, [reply]).promise)).resolves.toBe("max_tokens");
+  it("produces a schema for PlaceData that keeps the description limit client-side", () => {
+    const tooLong = { description: "x".repeat(121) };
+    expect(PlaceDataSchema.shape.description.safeParse(tooLong.description).success).toBe(false);
   });
 });
 
 describe("normalizeEnums", () => {
-  const tree = z.toJSONSchema(
-    z.object({ a: z.enum(["x", "Y"]).nullable(), list: z.array(z.object({ b: z.enum(["z"]) })) }),
-  );
-
-  it("handles nullable and nested enums and leaves other values alone", () => {
-    expect(normalizeEnums({ a: "y", list: [{ b: "Z" }] }, tree as never)).toEqual({
-      a: "Y",
-      list: [{ b: "z" }],
+  it("reaches nested arrays and nullable values", () => {
+    const schema = z.toJSONSchema(
+      z.object({
+        items: z.array(z.object({ t: z.enum(["free", "paid"]) })),
+        k: z.enum(["a"]).nullable(),
+      }),
+    ) as never;
+    expect(normalizeEnums({ items: [{ t: "PAID" }], k: "A" }, schema)).toEqual({
+      items: [{ t: "paid" }],
+      k: "a",
     });
-    expect(normalizeEnums({ a: null, list: [] }, tree as never)).toEqual({ a: null, list: [] });
-    expect(normalizeEnums({ a: "other", list: [] }, tree as never)).toEqual({
-      a: "other",
-      list: [],
-    });
+    expect(normalizeEnums({ items: [], k: null }, schema)).toEqual({ items: [], k: null });
   });
 });

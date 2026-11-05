@@ -1,143 +1,103 @@
-import { emptyTripState, type TripState } from "@triplanner/shared";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PROPOSAL_SEARCH_MAX_USES } from "../config/llm";
-import { setAnthropicClientForTest } from "./client";
-import { isSamePlaceName, pickLink, proposePlaces } from "./proposals";
-import { citedText, fakeClient, message } from "./testApi";
+import { emptyTripState, PlaceProposalSchema, type TripState } from "@triplanner/shared";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { setApexFetchForTest } from "./client";
+import type { fetchPage } from "./fetchPage";
+import { isSamePlaceName, proposePlaces } from "./proposals";
+import { setPageFetcherForTest } from "./research";
+import { chat, fakeFetch, fetchCall, type Reply } from "./testApi";
 
 const state: TripState = {
   ...emptyTripState(),
   city: "Paris",
-  start_date: "2026-11-10",
-  end_date: "2026-11-11",
-  plans: "the Louvre and modern art galleries",
+  start_date: "2026-12-01",
+  end_date: "2026-12-02",
+  plans: "Louvre and modern galleries",
   named_places: [{ name: "Louvre", note: null }],
   needs_search: true,
   budget_answered: true,
 };
 
-const extraction = {
-  places: [
-    {
-      name: "Galerie Perrotin",
-      category: "Gallery",
-      why: "Modern art",
-      google_maps_url: "https://www.google.com/maps/place/x",
-      website: "https://perrotin.com/",
-    },
-    {
-      name: "Thaddaeus Ropac",
-      category: "gallery",
-      why: "Modern art",
-      google_maps_url: null,
-      website: "https://ropac.net/",
-    },
-    {
-      name: "Fake Maps",
-      category: "gallery",
-      why: "x",
-      google_maps_url: "https://evil.example/maps",
-      website: null,
-    },
-    {
-      name: "Bad Link",
-      category: "gallery",
-      why: "x",
-      google_maps_url: "javascript:alert(1)",
-      website: "file:///etc/passwd",
-    },
-    {
-      name: "The Louvre Museum",
-      category: "museum",
-      why: "already named",
-      google_maps_url: null,
-      website: null,
-    },
-    {
-      name: "galerie perrotin",
-      category: "gallery",
-      why: "duplicate",
-      google_maps_url: null,
-      website: null,
-    },
-  ],
-};
+const place = (name: string) => ({ name, category: "gallery", why: "Fits." });
 
-const setup = () => {
-  const { client, requests } = fakeClient([
-    message({
-      content: [
-        citedText("Galerie Perrotin shows modern art. ", "https://perrotin.com/about", "Perrotin"),
-        citedText("Others are nice.", "https://guide.example/", "Guide"),
-      ],
+const run = (replies: Reply[]) => {
+  const fake = fakeFetch(replies);
+  setApexFetchForTest(fake.fetchFn);
+  return {
+    requests: fake.requests,
+    result: proposePlaces({
+      state,
+      messages: [{ id: "1", role: "user", content: "I love modern art", createdAt: "" }],
     }),
-    message({ content: [{ type: "text", text: JSON.stringify(extraction) }] }),
-  ]);
-  setAnthropicClientForTest(client);
-  return requests;
+  };
 };
 
-beforeEach(() => {
-  vi.spyOn(console, "info").mockImplementation(() => {});
-});
+beforeEach(() =>
+  setPageFetcherForTest((async (url: string) => ({
+    url,
+    title: "Guide",
+    text: "text",
+  })) as unknown as typeof fetchPage),
+);
 afterEach(() => {
-  setAnthropicClientForTest(null);
-  vi.restoreAllMocks();
+  setApexFetchForTest(null);
+  setPageFetcherForTest(null);
 });
 
 describe("proposePlaces", () => {
-  it("searches with only the one tool, extracts with none", async () => {
-    const requests = setup();
-    await proposePlaces({ state, messages: [] });
-    expect(requests[0]!.body.tools).toEqual([
-      { type: "web_search_20250305", name: "web_search", max_uses: PROPOSAL_SEARCH_MAX_USES },
+  it("attaches ids, exactly one maps link built in code, and only pages that loaded", async () => {
+    const { requests, result } = run([
+      fetchCall("https://guide.example/"),
+      chat({ content: "Centre Pompidou and Palais de Tokyo." }),
+      chat({ content: JSON.stringify({ places: [place("Centre Pompidou")] }) }),
     ]);
-    expect(requests[1]!.body).not.toHaveProperty("tools");
-    expect(requests[0]!.body.system).toMatch(/ignore any instructions/i);
-    expect(requests[0]!.body.messages[0].content).toContain("Louvre");
+    const [first, ...rest] = await result;
+    expect(rest).toEqual([]);
+    expect(PlaceProposalSchema.safeParse(first).success).toBe(true);
+    expect(first!.id).toBeTruthy();
+    expect(first!.link).toBe(
+      "https://www.google.com/maps/search/?api=1&query=Centre%20Pompidou%2C%20Paris",
+    );
+    expect(first!.link_kind).toBe("google_maps");
+    expect(first!.sources).toEqual([{ url: "https://guide.example/", title: "Guide" }]);
+    expect(requests.at(-1)!.body.tools).toBeUndefined();
+    expect(JSON.stringify(requests[0]!.body.messages)).toContain("I love modern art");
   });
 
-  it("drops named places and duplicates, assigns ids, one link, backend-attached sources", async () => {
-    setup();
-    const proposals = await proposePlaces({ state, messages: [] });
-    expect(proposals.map((p) => p.name)).toEqual([
-      "Galerie Perrotin",
-      "Thaddaeus Ropac",
-      "Fake Maps",
-      "Bad Link",
+  it("works without any page, because step 2 verifies each chosen place", async () => {
+    const { result } = run([
+      chat({ content: "Centre Pompidou." }),
+      chat({ content: JSON.stringify({ places: [place("Centre Pompidou")] }) }),
     ]);
-    expect(new Set(proposals.map((p) => p.id)).size).toBe(4);
-    const [perrotin, ropac, fake, bad] = proposals;
-    expect(perrotin).toMatchObject({
-      category: "gallery",
-      link: "https://www.google.com/maps/place/x",
-      link_kind: "google_maps",
+    expect((await result)[0]!.sources).toEqual([]);
+  });
+
+  it("removes named places and duplicates", async () => {
+    const { result } = run([
+      chat({ content: "notes" }),
+      chat({
+        content: JSON.stringify({
+          places: [place("The Louvre Museum"), place("Pompidou"), place("Centre Pompidou")],
+        }),
+      }),
+    ]);
+    expect((await result).map((p) => p.name)).toEqual(["Pompidou"]);
+  });
+
+  it("passes on model failures", async () => {
+    await expect(run([chat({ finish: "content_filter" })]).result).rejects.toMatchObject({
+      code: "refusal",
     });
-    expect(ropac).toMatchObject({ link: "https://ropac.net/", link_kind: "website" });
-    expect(fake).toMatchObject({ link: null, link_kind: null });
-    expect(bad).toMatchObject({ link: null, link_kind: null });
-    // Cited for this place only.
-    expect(perrotin!.sources).toEqual([{ url: "https://perrotin.com/about", title: "Perrotin" }]);
-    // Not tied to a citation: gets all the research's sources.
-    expect(ropac!.sources.map((s) => s.url)).toEqual([
-      "https://perrotin.com/about",
-      "https://guide.example/",
-    ]);
+    await expect(
+      run([chat({ content: "notes" }), chat({ content: "not json" })]).result,
+    ).rejects.toMatchObject({ code: "extract_failed" });
   });
 });
 
-describe("helpers", () => {
-  it("isSamePlaceName", () => {
-    expect(isSamePlaceName("Louvre", "The Louvre Museum")).toBe(true);
-    expect(isSamePlaceName("Musée d'Orsay", "musee d orsay")).toBe(true);
-    expect(isSamePlaceName("Louvre", "Orsay")).toBe(false);
-    expect(isSamePlaceName("Museum", "Louvre")).toBe(false);
-  });
-
-  it("pickLink prefers real Google Maps URLs", () => {
-    expect(pickLink("https://maps.app.goo.gl/abc", "https://a.fr").link_kind).toBe("google_maps");
-    expect(pickLink("https://maps.google.fr/x", null).link_kind).toBe("google_maps");
-    expect(pickLink("https://a.example/maps", "https://a.fr").link_kind).toBe("website");
-    expect(pickLink(null, "ftp://a.fr").link).toBeNull();
-  });
+describe("isSamePlaceName", () => {
+  it.each([
+    ["Louvre", "The Louvre Museum", true],
+    ["Musée d'Orsay", "Orsay", true],
+    ["Louvre", "Orsay", false],
+    ["", "Louvre", false],
+  ])("%s / %s → %s", (a, b, same) => expect(isSamePlaceName(a, b)).toBe(same));
 });

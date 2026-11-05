@@ -14,9 +14,8 @@ const clean = (value: string | undefined): string | undefined => {
   return trimmed ? trimmed : undefined;
 };
 
-/** The Claude API key. CLAUDE_API_KEY is an accepted alias of ANTHROPIC_API_KEY. */
-export const anthropicApiKey = (): string | undefined =>
-  clean(process.env.ANTHROPIC_API_KEY) ?? clean(process.env.CLAUDE_API_KEY);
+/** The Apex API key. */
+export const apexApiKey = (): string | undefined => clean(process.env.APEX_API_KEY);
 
 export const devAccessPassword = (): string | undefined => clean(process.env.DEV_ACCESS_PASSWORD);
 

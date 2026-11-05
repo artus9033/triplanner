@@ -1,18 +1,14 @@
-import { ChatAnthropic } from "@langchain/anthropic";
-import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { generateText, jsonSchema, Output, type JSONSchema7 } from "ai";
 import { NamedPlaceSchema, type ChatMessage, type TripState } from "@triplanner/shared";
 import { z } from "zod";
-import { anthropicApiKey } from "../config/env";
-import { CLAUDE_MODEL, INTAKE_EFFORT } from "../config/llm";
+import { INTAKE_EFFORT, INTAKE_MAX_TOKENS } from "../config/llm";
 import { FX_TO_USD } from "../config/optimizer";
-import { LlmError, toLlmError } from "../llm/errors";
+import { apexModel, effortOptions } from "../llm/client";
+import { LlmError, structuredOutputError } from "../llm/errors";
 import { isIsoDate, weekdayOf } from "../llm/validate";
 
 export type IntakeField = "start_date" | "end_date" | "city" | "plans" | "budget";
 export type IntakePhase = "dates" | "city" | "plans" | "budget" | "complete";
-
-/** Output is one short sentence plus a filled-in state, so this is plenty. */
-const INTAKE_MAX_TOKENS = 2000;
 
 const hasText = (value: string | null): boolean => !!value?.trim();
 
@@ -121,6 +117,10 @@ export const applyIntakeUpdate = (
   next.plans = update.plans?.trim() || next.plans;
   next.named_places = update.named_places ?? next.named_places;
   next.needs_search = update.needs_search ?? next.needs_search;
+  // Named places are plans, even when the model reports them only in named_places.
+  if (!hasText(next.plans) && next.named_places.length > 0) {
+    next.plans = next.named_places.map((place) => place.name).join(", ");
+  }
   // With wishes but no named place, the only way forward is a search.
   if (hasText(next.plans) && next.named_places.length === 0) next.needs_search = true;
 
@@ -164,29 +164,6 @@ export const applyIntakeUpdate = (
   return { state: next, problems };
 };
 
-let testFetch: typeof fetch | null = null;
-
-export const setIntakeFetchForTest = (fake: typeof fetch | null): void => {
-  testFetch = fake;
-};
-
-/**
- * Sends no temperature, top_p, top_k, thinking config or tool_choice, all of which return a 400 on
- * this model. outputConfig merges with the format set by withStructuredOutput into output_config.
- */
-const createIntakeModel = (): ChatAnthropic => {
-  const apiKey = anthropicApiKey() ?? (testFetch ? "test-key" : undefined);
-  if (!apiKey) throw new LlmError("no_key");
-  return new ChatAnthropic({
-    model: CLAUDE_MODEL,
-    apiKey,
-    maxTokens: INTAKE_MAX_TOKENS,
-    maxRetries: 2,
-    outputConfig: { effort: INTAKE_EFFORT },
-    ...(testFetch ? { clientOptions: { fetch: testFetch } } : {}),
-  });
-};
-
 const systemPrompt = (state: TripState, today: string): string =>
   `You help a traveller set up a trip by reading their chat messages and filling in a form. The app asks the questions; you only record what they said.
 
@@ -195,11 +172,18 @@ Today is ${today} (${weekdayOf(today)}). Resolve relative dates against it and g
 Current form:
 ${JSON.stringify(state)}
 
-Fill in only what the user has actually said. Use null for anything they have not stated.
+Read the whole of the latest message, which often answers several things at once, and record every one of them. Use null only for what the user has not stated.
 
 Plans: a specific place goes in named_places, with any details they gave as its note. For "the Louvre, Richelieu wing, and some modern art galleries", name the Louvre with note "Richelieu wing", and set needs_search to true because the galleries are unspecific. needs_search is false only if every wish is a specific place.
 
 Budget: "no limit" or similar means budget_answered is true with a null amount. Report the amount and currency as the user gave them, without converting.`;
+
+/** Code asks the questions. A question the model added anyway would be a second one in the reply. */
+export const statementsOnly = (text: string): string =>
+  (text.match(/[^.!?]+[.!?]*\s*/g) ?? [])
+    .filter((sentence) => !sentence.trim().endsWith("?"))
+    .join("")
+    .trim();
 
 export type IntakeTurn = {
   state: TripState;
@@ -223,39 +207,33 @@ export const advanceIntake = async ({
   const history =
     last?.role === "user" && last.content === userMessage ? messages.slice(0, -1) : messages;
 
-  const structured = createIntakeModel().withStructuredOutput(IntakeUpdateSchema, {
-    method: "jsonSchema",
-    includeRaw: true,
-  });
-
-  let raw: AIMessage | undefined;
-  let update: IntakeUpdate | null;
+  let update: IntakeUpdate;
   try {
-    const result = await structured.invoke(
-      [
-        new SystemMessage(systemPrompt(state, today)),
-        ...history.map((m) =>
-          m.role === "user" ? new HumanMessage(m.content) : new AIMessage(m.content),
-        ),
-        new HumanMessage(userMessage),
+    const result = await generateText({
+      model: apexModel(),
+      system: systemPrompt(state, today),
+      messages: [
+        ...history.map((m) => ({ role: m.role, content: m.content })),
+        { role: "user" as const, content: userMessage },
       ],
-      { signal },
-    );
-    raw = result.raw as AIMessage;
-    update = result.parsed ?? null;
+      output: Output.object({
+        schema: jsonSchema(z.toJSONSchema(IntakeUpdateSchema) as JSONSchema7),
+      }),
+      maxOutputTokens: INTAKE_MAX_TOKENS,
+      abortSignal: signal,
+      providerOptions: effortOptions(INTAKE_EFFORT),
+    });
+    if (result.finishReason === "content-filter") throw new LlmError("refusal");
+    if (result.finishReason === "length") throw new LlmError("max_tokens");
+    update = IntakeUpdateSchema.parse(result.output);
   } catch (err) {
-    throw toLlmError(err, signal);
+    throw structuredOutputError(err, signal);
   }
-
-  const stopReason = raw.response_metadata?.stop_reason;
-  if (stopReason === "refusal") throw new LlmError("refusal");
-  if (stopReason === "max_tokens") throw new LlmError("max_tokens");
-  if (!update) throw new LlmError("extract_failed", { detail: "intake output failed validation" });
 
   const { state: nextState, problems } = applyIntakeUpdate(state, update, today);
   const complete = missingFields(nextState, today).length === 0;
   const parts = [
-    update.acknowledgement.trim(),
+    statementsOnly(update.acknowledgement),
     ...problems,
     complete ? completionMessage(nextState) : nextQuestion(nextState, today),
   ];

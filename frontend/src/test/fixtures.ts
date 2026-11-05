@@ -49,7 +49,7 @@ export const makePlace = (overrides: Partial<TripPlace> = {}): TripPlace => ({
     needs_reservation: true,
   },
   sources: [{ url: "https://www.louvre.fr/visit", title: "Plan your visit" }],
-  model: "claude-opus-5-5",
+  model: "callstack/Apex",
   durationMs: 1000,
   ...overrides,
 });

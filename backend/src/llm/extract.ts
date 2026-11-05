@@ -1,8 +1,8 @@
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { generateText, jsonSchema, Output, type JSONSchema7 } from "ai";
 import { z } from "zod";
-import { CLAUDE_MODEL, EXTRACT_MAX_TOKENS, SEARCH_EFFORT } from "../config/llm";
-import { getAnthropicClient } from "./client";
-import { LlmError, toLlmError } from "./errors";
+import { EXTRACT_MAX_TOKENS, SEARCH_EFFORT } from "../config/llm";
+import { apexModel, effortOptions } from "./client";
+import { LlmError, structuredOutputError } from "./errors";
 import { fromSdkUsage, type LlmUsage } from "./usage";
 
 type JsonNode = {
@@ -13,11 +13,7 @@ type JsonNode = {
   oneOf?: JsonNode[];
 };
 
-/**
- * Rewrites string values to the schema's spelling of an enum value, ignoring case. This matters:
- * the SDK moves `enum` out of the schema it sends and into the description (see
- * lib/transform-json-schema), so the API does not constrain these values, and zod compares exactly.
- */
+/** Rewrites string values to the schema's spelling of an enum value, ignoring case. */
 export const normalizeEnums = (value: unknown, node: JsonNode | undefined): unknown => {
   if (!node) return value;
   if (typeof value === "string" && node.enum) {
@@ -49,69 +45,46 @@ export type ExtractRequest = {
   system: string;
   text: string;
   signal?: AbortSignal;
-  /** Called with the token counts of the call, for cost records. */
+  /** Called with the token counts of the call. */
   onUsage?: (usage: LlmUsage) => void;
 };
 
 /**
  * The extract call: structured output and no tools, so web content that tries to instruct the model
- * reaches a call that can do nothing. SDK constraints it relies on, checked against 1.5.0: length
- * and range limits are removed from the schema sent (they move to the description text) and
- * validated client-side. `messages.parse` throws on invalid output before the caller could see
- * stop_reason, so the parse step records the failure and returns null, leaving stop_reason first.
+ * reaches a call that can do nothing. Validation is done here so that enums can be compared without
+ * regard to case, and so a violated limit is a failed extraction.
  */
 export const extractStructured = async <S extends z.ZodType>(
   schema: S,
   { system, text, signal, onUsage }: ExtractRequest,
 ): Promise<z.infer<S>> => {
-  const format = zodOutputFormat(schema);
-  const enumTree = z.toJSONSchema(schema) as JsonNode;
-  let parseFailure: string | null = null;
-  const recordingFormat: typeof format = {
-    ...format,
-    parse: (content) => {
-      try {
-        const normalized = normalizeEnums(JSON.parse(content), enumTree);
-        return format.parse(JSON.stringify(normalized));
-      } catch (err) {
-        parseFailure = err instanceof Error ? err.message : String(err);
-        return null as z.infer<S>;
-      }
-    },
-  };
-
-  let message;
+  const wireSchema = z.toJSONSchema(schema);
+  let result;
+  let output: unknown;
   try {
-    message = await getAnthropicClient().messages.parse(
-      {
-        model: CLAUDE_MODEL,
-        max_tokens: EXTRACT_MAX_TOKENS,
-        output_config: { format: recordingFormat, effort: SEARCH_EFFORT },
-        system,
-        messages: [{ role: "user", content: text }],
-      },
-      { signal },
-    );
+    result = await generateText({
+      model: apexModel(),
+      system,
+      prompt: text,
+      output: Output.object({ schema: jsonSchema(wireSchema as JSONSchema7) }),
+      maxOutputTokens: EXTRACT_MAX_TOKENS,
+      abortSignal: signal,
+      providerOptions: effortOptions(SEARCH_EFFORT),
+    });
+    // Stop reasons come first: a refused or truncated answer is not a parsing problem.
+    if (result.finishReason === "content-filter") throw new LlmError("refusal");
+    if (result.finishReason === "length") throw new LlmError("max_tokens");
+    output = result.output;
   } catch (err) {
-    throw toLlmError(err, signal);
+    throw structuredOutputError(err, signal);
   }
-  onUsage?.(fromSdkUsage(message.usage));
+  onUsage?.(fromSdkUsage(result.totalUsage));
 
-  switch (message.stop_reason) {
-    case "refusal":
-      throw new LlmError("refusal");
-    case "max_tokens":
-    case "model_context_window_exceeded":
-      throw new LlmError("max_tokens");
-    case "end_turn":
-      break;
-    default:
-      throw new LlmError("api", { detail: `unexpected stop_reason: ${message.stop_reason}` });
-  }
-  if (message.parsed_output === null || message.parsed_output === undefined) {
+  const parsed = schema.safeParse(normalizeEnums(output, wireSchema as JsonNode));
+  if (!parsed.success) {
     throw new LlmError("extract_failed", {
-      detail: `structured output failed validation: ${parseFailure ?? "no output"}`,
+      detail: `structured output failed validation: ${parsed.error.message}`,
     });
   }
-  return message.parsed_output as z.infer<S>;
+  return parsed.data;
 };
