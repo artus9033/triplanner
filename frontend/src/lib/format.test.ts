@@ -1,3 +1,5 @@
+import type { PlaceData } from "@triplanner/shared";
+import { hoursNote } from "./format";
 import { describe, expect, it } from "vitest";
 import { addDays, formatDate, formatDuration, formatMoney, formatScheduledTicket } from "./format";
 
@@ -27,5 +29,16 @@ describe("format", () => {
     expect(formatScheduledTicket({ kind: "reduced", price: 9, label: "Under 25" })).toBe(
       "$9, reduced (Under 25)",
     );
+  });
+});
+
+describe("hoursNote", () => {
+  const data = (over: Partial<PlaceData>) => ({ hours: [], ...over }) as unknown as PlaceData;
+
+  it("separates a confirmed closure, assumed hours, and hours on other dates", () => {
+    expect(hoursNote(data({ closed_during_trip: true }))).toBe("Closed on your dates");
+    expect(hoursNote(data({}))).toMatch(/assumes 08:00–22:00/);
+    const other = data({ hours: [{ date: "2027-01-01", start: "09:00", end: "10:00" }] });
+    expect(hoursNote(other)).toBe("None found for your dates");
   });
 });

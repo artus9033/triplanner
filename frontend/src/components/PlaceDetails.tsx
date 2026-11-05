@@ -1,6 +1,6 @@
 import { Chip, Stack } from "@mui/material";
 import type { TripPlace, TripState } from "@triplanner/shared";
-import { formatDate, formatTicket, hoursForTrip } from "../lib/format";
+import { formatDate, formatTicket, hoursForTrip, hoursNote } from "../lib/format";
 import { safeHttpUrl, urlHost } from "../lib/safeUrl";
 import { ExternalLink } from "./ExternalLink";
 import type { ReactNode } from "react";
@@ -58,7 +58,7 @@ export function PlaceDetails({ place, state }: { place: TripPlace; state: TripSt
         <Field label="Address">{data.address ?? "Not found"}</Field>
         <Field label="Hours">
           {hours.length === 0 ? (
-            "None found for your dates"
+            hoursNote(data)
           ) : (
             <ul>
               {hours.map((entry) => (

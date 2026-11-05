@@ -163,6 +163,11 @@ function Visit({
           {place?.data?.needs_reservation === true && <ReservationBadge needed />}
           {item.shortened && <Chip size="small" variant="outlined" label="shortened visit" />}
         </Stack>
+        {item.hoursAssumed && (
+          <Tooltip title="No opening hours were found, so this time assumes normal daytime hours. Check before you go.">
+            <Chip size="small" label="hours not confirmed" />
+          </Tooltip>
+        )}
         <SlackMarker slack={item.slack} maxSlack={maxSlack} />
         <Collapse in={selected} unmountOnExit>
           <div

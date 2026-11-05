@@ -1,3 +1,4 @@
+import { ASSUMED_OPEN_HOURS } from "@triplanner/shared";
 import type {
   DropReason,
   PlaceData,
@@ -61,6 +62,13 @@ export const hoursForTrip = (data: PlaceData, state: TripState): PlaceData["hour
       (!state.start_date || h.date >= state.start_date) &&
       (!state.end_date || h.date <= state.end_date),
   );
+
+/** What to say when a place shows no hours for the trip's dates. */
+export const hoursNote = (data: PlaceData): string => {
+  if (data.closed_during_trip) return "Closed on your dates";
+  if (data.hours.length > 0) return "None found for your dates";
+  return `Not found. The schedule assumes ${ASSUMED_OPEN_HOURS.start}–${ASSUMED_OPEN_HOURS.end}, so check before you go.`;
+};
 
 export const dropReasonText: Record<DropReason, string> = {
   no_hours_data: "No opening hours found",

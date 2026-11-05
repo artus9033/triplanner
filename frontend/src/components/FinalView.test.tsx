@@ -71,6 +71,14 @@ describe("FinalView", () => {
     expect(order).toEqual(["day", "louvre", "a2", "day", "b"]);
   });
 
+  it("labels only the visits whose hours were assumed", () => {
+    const base = trip();
+    const result = base.optimization.result!;
+    const items = result.items.map((item, i) => (i === 0 ? { ...item, hoursAssumed: true } : item));
+    show({ ...base, optimization: { ...base.optimization, result: { ...result, items } } });
+    expect(screen.getAllByText("hours not confirmed")).toHaveLength(1);
+  });
+
   it("shows times, ticket, price, travel and mode", () => {
     show();
     const [first, second, third] = screen.getAllByTestId("final-item");
